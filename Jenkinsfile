@@ -50,7 +50,12 @@ pipeline {
             --exclude='.env.local' \
             ./ "$DEPLOY_DIR/"
 
-          sudo /usr/bin/systemctl restart shix-media-server
+          # Restart via whichever init system is present.
+          if [ -d /run/systemd/system ]; then
+            sudo /usr/bin/systemctl restart shix-media-server
+          else
+            sudo /usr/sbin/service shix-media-server restart
+          fi
         '''
       }
     }

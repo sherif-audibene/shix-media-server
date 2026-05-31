@@ -100,8 +100,12 @@ pnpm install --frozen-lockfile
 pnpm build
 chown -R "$SVC_USER:$SVC_USER" "$DEPLOY_DIR"
 
-echo "==> [7/7] systemd service + Jenkins sudoers"
-cat > /etc/systemd/system/$APP.service <<EOF
+echo "==> [7/7] Service + Jenkins sudoers"
+
+LOGHINT=""
+if [ -d /run/systemd/system ]; then
+  echo "    init system: systemd"
+  cat > /etc/systemd/system/$APP.service <<EOF
 [Unit]
 Description=shix-media-server (Next.js)
 After=network.target
@@ -124,15 +128,67 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
+  systemctl daemon-reload
+  systemctl enable "$APP"
+  systemctl restart "$APP"
+  LOGHINT="journalctl -u $APP -n 50 --no-pager"
+else
+  echo "    init system: SysV (service / init.d)"
+  apt-get install -y sysvinit-utils >/dev/null 2>&1 || true
+  LOG=/var/log/$APP.log
+  touch "$LOG"; chown "$SVC_USER" "$LOG"
+  cat > /etc/init.d/$APP <<EOF
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          $APP
+# Required-Start:    \$network \$remote_fs
+# Required-Stop:     \$network \$remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: shix-media-server (Next.js)
+### END INIT INFO
+NAME=$APP
+DIR=$DEPLOY_DIR
+RUNUSER=$SVC_USER
+PIDFILE=/var/run/\$NAME.pid
+LOG=$LOG
+CMD="/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p $PORT"
+export NODE_ENV=production PORT=$PORT FFMPEG_PATH=/usr/bin/ffmpeg
+
+start() {
+  echo "Starting \$NAME"
+  start-stop-daemon --start --quiet --background --make-pidfile \\
+    --pidfile "\$PIDFILE" --chuid "\$RUNUSER" --chdir "\$DIR" \\
+    --startas /bin/sh -- -c "exec \$CMD >> \$LOG 2>&1"
+}
+stop() {
+  echo "Stopping \$NAME"
+  start-stop-daemon --stop --quiet --pidfile "\$PIDFILE" --retry TERM/10/KILL/5 || true
+  rm -f "\$PIDFILE"
+}
+case "\$1" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; sleep 1; start ;;
+  status)
+    if [ -f "\$PIDFILE" ] && kill -0 "\$(cat "\$PIDFILE")" 2>/dev/null; then
+      echo "\$NAME running (pid \$(cat "\$PIDFILE"))"
+    else echo "\$NAME not running"; exit 3; fi ;;
+  *) echo "Usage: \$0 {start|stop|restart|status}"; exit 1 ;;
+esac
+EOF
+  chmod +x /etc/init.d/$APP
+  command -v update-rc.d >/dev/null 2>&1 && update-rc.d "$APP" defaults >/dev/null 2>&1 || true
+  service "$APP" restart || /etc/init.d/$APP restart
+  LOGHINT="tail -n 50 $LOG"
+fi
 
 # Let Jenkins restart the service after future deploys, no password.
-echo "$SVC_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart $APP, /usr/bin/systemctl status $APP" \
-  > /etc/sudoers.d/$APP
+# Allow both mechanisms so this works regardless of init system.
+cat > /etc/sudoers.d/$APP <<EOF
+$SVC_USER ALL=(root) NOPASSWD: /usr/sbin/service $APP restart, /usr/sbin/service $APP status, /usr/bin/systemctl restart $APP, /usr/bin/systemctl status $APP
+EOF
 chmod 440 /etc/sudoers.d/$APP
-
-systemctl daemon-reload
-systemctl enable "$APP"
-systemctl restart "$APP"
 
 echo "==> Health check"
 ok=0
@@ -146,11 +202,11 @@ if [ "$ok" = 1 ]; then
   echo "✅ Running on http://127.0.0.1:$PORT"
 else
   echo "⚠️  Service started but health check didn't pass yet. Check:"
-  echo "    journalctl -u $APP -n 50 --no-pager"
+  echo "    $LOGHINT"
 fi
 echo
 echo "Next:"
 echo "  • Point a Cloudflare Tunnel hostname at  http://localhost:$PORT"
-echo "  • Future updates: just push to GitHub and run the Jenkins job"
-echo "    'shix-media-server' (build → rsync into $DEPLOY_DIR → restart)."
-echo "  • Edit creds/folders later:  sudoedit $ENVF  &&  sudo systemctl restart $APP"
+echo "  • Future updates: push to GitHub and run the Jenkins job 'shix-media-server'."
+echo "  • Manage:  sudo service $APP {start|stop|restart|status}"
+echo "  • Edit creds/folders:  sudoedit $ENVF  &&  sudo service $APP restart"

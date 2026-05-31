@@ -12,8 +12,11 @@ sudo bash /tmp/provision.sh        # prompts for app user/pass + video paths
 ```
 
 This installs everything (Node 20, ffmpeg, pnpm), clones + builds the app,
-writes `/opt/shix-media-server/.env.local`, and starts the systemd service on
-`127.0.0.1:6302`. The app is live after it finishes.
+writes `/opt/shix-media-server/.env.local`, and starts the service on
+`127.0.0.1:6302`. It auto-detects the init system: **systemd** if present,
+otherwise a **SysV `/etc/init.d` script** managed with `service`
+(`sudo service shix-media-server {start|stop|restart|status}`). The app is
+live after it finishes.
 
 Then add a Cloudflare Tunnel ingress: `your-hostname -> http://localhost:6302`.
 
