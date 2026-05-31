@@ -5,16 +5,23 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import ffmpegPath from "ffmpeg-static";
+import ffmpegStatic from "ffmpeg-static";
 
 const CACHE_DIR = path.join(os.tmpdir(), "next-trpc-grid-thumbs");
 const THUMB_WIDTH = 480;
 const SEEK_SECONDS = "3";
 
+/**
+ * Resolve the ffmpeg binary: an explicit FFMPEG_PATH (set in production to the
+ * system ffmpeg) wins, then the bundled ffmpeg-static (local dev), then a bare
+ * "ffmpeg" found on PATH.
+ */
+const FFMPEG_BIN = process.env.FFMPEG_PATH || ffmpegStatic || "ffmpeg";
+
 /** Decode a single JPEG frame from the video via ffmpeg, to stdout. */
 function runFfmpeg(absPath: string): Promise<Buffer | null> {
   return new Promise((resolve) => {
-    if (!ffmpegPath) {
+    if (!FFMPEG_BIN) {
       resolve(null);
       return;
     }
@@ -33,7 +40,7 @@ function runFfmpeg(absPath: string): Promise<Buffer | null> {
       "image2",
       "pipe:1",
     ];
-    const proc = spawn(ffmpegPath, args, {
+    const proc = spawn(FFMPEG_BIN, args, {
       stdio: ["ignore", "pipe", "ignore"],
     });
     const chunks: Buffer[] = [];
