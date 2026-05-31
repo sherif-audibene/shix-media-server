@@ -130,10 +130,8 @@ export async function getVideoFile(
   }
 }
 
-/** Recursively scan a folder for supported video files. */
-export async function listVideos(
-  folder: VideoFolderConfig,
-): Promise<VideoFile[]> {
+/** Recursively scan a folder for supported video files (uncached). */
+async function scanVideos(folder: VideoFolderConfig): Promise<VideoFile[]> {
   const results: VideoFile[] = [];
 
   async function walk(dir: string, depth: number): Promise<void> {
@@ -176,4 +174,50 @@ export async function listVideos(
   await walk(folder.path, 0);
   results.sort((a, b) => a.relPath.localeCompare(b.relPath));
   return results;
+}
+
+/** How long a folder scan stays fresh before being re-read from disk. */
+const SCAN_TTL_MS = 30_000;
+
+interface ScanCacheEntry {
+  at: number;
+  videos: VideoFile[];
+}
+
+const scanCache = new Map<string, ScanCacheEntry>();
+const inflightScans = new Map<string, Promise<VideoFile[]>>();
+
+/**
+ * Returns a folder's video list, served from an in-memory cache that expires
+ * after SCAN_TTL_MS. Concurrent misses share a single scan (no thundering
+ * herd). Keeps paging snappy for large folders without going stale for long.
+ */
+export async function listVideos(
+  folder: VideoFolderConfig,
+): Promise<VideoFile[]> {
+  const cached = scanCache.get(folder.id);
+  if (cached && Date.now() - cached.at < SCAN_TTL_MS) {
+    return cached.videos;
+  }
+
+  const pending = inflightScans.get(folder.id);
+  if (pending) return pending;
+
+  const scan = scanVideos(folder)
+    .then((videos) => {
+      scanCache.set(folder.id, { at: Date.now(), videos });
+      return videos;
+    })
+    .finally(() => {
+      inflightScans.delete(folder.id);
+    });
+
+  inflightScans.set(folder.id, scan);
+  return scan;
+}
+
+/** Drop cached scans (a specific folder, or all). */
+export function invalidateVideoScan(folderId?: string): void {
+  if (folderId) scanCache.delete(folderId);
+  else scanCache.clear();
 }
