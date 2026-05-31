@@ -16,6 +16,11 @@ const serverSchema = z.object({
   AUTH_USERNAME: z.string().min(1).optional(),
   AUTH_PASSWORD: z.string().min(1).optional(),
   /**
+   * Set to "true" when serving over plain HTTP (no TLS) so the session cookie
+   * is NOT marked Secure — otherwise the browser drops it and login fails.
+   */
+  AUTH_INSECURE_COOKIE: z.string().optional(),
+  /**
    * Video source folders. Server-only (filesystem paths).
    * Format: `Label|/abs/path` entries separated by `;`.
    * Example: `Movies|/Users/me/Movies;Talks|/data/talks`
@@ -40,6 +45,7 @@ const rawEnv = {
   AUTH_SECRET: process.env.AUTH_SECRET,
   AUTH_USERNAME: process.env.AUTH_USERNAME,
   AUTH_PASSWORD: process.env.AUTH_PASSWORD,
+  AUTH_INSECURE_COOKIE: process.env.AUTH_INSECURE_COOKIE,
   VIDEO_FOLDERS: process.env.VIDEO_FOLDERS,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
 };

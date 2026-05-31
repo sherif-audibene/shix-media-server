@@ -57,7 +57,10 @@ export function verifySessionToken(
   }
 }
 
-const secureFlag = env.NODE_ENV === "production" ? "; Secure" : "";
+// Secure in production, unless explicitly disabled for plain-HTTP serving.
+const cookieSecure =
+  env.NODE_ENV === "production" && env.AUTH_INSECURE_COOKIE !== "true";
+const secureFlag = cookieSecure ? "; Secure" : "";
 
 /** Serialized Set-Cookie value that stores the session. */
 export function buildSessionCookie(token: string): string {

@@ -1,4 +1,26 @@
-# Deploying shix-media-server (bare-metal + Jenkins + Nginx/TLS)
+# Deploying shix-media-server
+
+## Quick path (this server: Debian + Jenkins on one box, behind Cloudflare)
+
+Origin runs HTTP on `127.0.0.1:6302`; Cloudflare Tunnel provides the public
+HTTPS hostname (so the session cookie stays Secure). No Nginx/certbot needed.
+
+```bash
+# on the server, once, as a sudo user:
+curl -fsSL https://raw.githubusercontent.com/sherif-audibene/shix-media-server/main/deploy/provision.sh -o /tmp/provision.sh
+sudo bash /tmp/provision.sh        # prompts for app user/pass + video paths
+```
+
+Then run the Jenkins job **shix-media-server** (build → rsync into
+`/opt/shix-media-server` → start on `127.0.0.1:6302`), and add a Cloudflare
+Tunnel ingress: `your-hostname -> http://localhost:6302`.
+
+The rest of this doc is the manual/Nginx+TLS reference if you ever move off
+Cloudflare.
+
+---
+
+# Manual reference (bare-metal + Jenkins + Nginx/TLS)
 
 The app streams video files off the server's local disk and shells out to
 `ffmpeg` for thumbnails, so it must run on the machine where the videos live

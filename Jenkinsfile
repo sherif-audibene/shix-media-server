@@ -22,11 +22,9 @@ pipeline {
     }
 
     stage('Install') {
+      // pnpm is provided system-wide via corepack (set up in deploy/provision.sh).
       steps {
-        sh '''
-          corepack enable
-          pnpm install --frozen-lockfile
-        '''
+        sh 'pnpm install --frozen-lockfile'
       }
     }
 
@@ -61,7 +59,7 @@ pipeline {
       steps {
         sh '''
           for i in $(seq 1 30); do
-            if curl -fsS -o /dev/null http://127.0.0.1:3000/login; then
+            if curl -fsS -o /dev/null http://127.0.0.1:6302/login; then
               echo "service is up"; exit 0
             fi
             sleep 1

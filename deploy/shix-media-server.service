@@ -14,10 +14,12 @@ WorkingDirectory=/opt/shix-media-server
 # All secrets (AUTH_*, VIDEO_FOLDERS, NEXT_PUBLIC_APP_URL) live in
 # /opt/shix-media-server/.env.local, which Next loads at startup.
 Environment=NODE_ENV=production
-Environment=PORT=3000
+Environment=PORT=6302
 Environment=FFMPEG_PATH=/usr/bin/ffmpeg
 
-ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 3000
+# Bind to localhost only — Cloudflare Tunnel (cloudflared) reaches it locally;
+# the port is not exposed on any public interface.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 6302
 
 Restart=on-failure
 RestartSec=5
