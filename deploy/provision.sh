@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# One-shot installer for shix-media-server on Debian/Ubuntu.
+# One-shot installer for shix-media-server on Debian/Ubuntu (SysV init).
 # Installs prerequisites, fetches + builds the app, configures it, and starts
-# it as a systemd service on 127.0.0.1:6302 (front it with Cloudflare Tunnel).
+# it as a SysV service on 0.0.0.0:6302, served over plain HTTP.
 #
 #   sudo bash provision.sh
 #
@@ -62,7 +62,7 @@ else
   echo "    Video folders — format 'Label|/abs/path', separate multiple with ';'"
   echo "    e.g. Movies|/home/sherifs/media/movies;Downloads|/home/sherifs/Downloads"
   read -rp "    VIDEO_FOLDERS: " VIDEO_FOLDERS
-  read -rp "    Public Cloudflare URL (https://...; leave blank if unsure): " APP_URL
+  read -rp "    Public URL (http://HOST:PORT, e.g. http://1.2.3.4:6302; blank if unsure): " APP_URL
   SECRET=$(openssl rand -hex 32)
 
   umask 077
@@ -71,8 +71,8 @@ NODE_ENV=production
 PORT=$PORT
 FFMPEG_PATH=/usr/bin/ffmpeg
 
-# Served over HTTPS via Cloudflare → keep the session cookie Secure.
-AUTH_INSECURE_COOKIE=false
+# Served over plain HTTP → cookie must NOT be Secure or the browser drops it.
+AUTH_INSECURE_COOKIE=true
 AUTH_SECRET=$SECRET
 AUTH_USERNAME=$APP_USER
 AUTH_PASSWORD=$APP_PASS
@@ -101,44 +101,13 @@ pnpm install --frozen-lockfile
 pnpm build
 chown -R "$SVC_USER:$SVC_USER" "$DEPLOY_DIR"
 
-echo "==> [7/7] Service + Jenkins sudoers"
+echo "==> [7/7] SysV service + Jenkins sudoers"
 
-LOGHINT=""
-if [ -d /run/systemd/system ]; then
-  echo "    init system: systemd"
-  cat > /etc/systemd/system/$APP.service <<EOF
-[Unit]
-Description=shix-media-server (Next.js)
-After=network.target
-
-[Service]
-Type=simple
-User=$SVC_USER
-Group=$SVC_USER
-WorkingDirectory=$DEPLOY_DIR
-Environment=NODE_ENV=production
-Environment=PORT=$PORT
-Environment=FFMPEG_PATH=/usr/bin/ffmpeg
-ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p $PORT
-Restart=on-failure
-RestartSec=5
-NoNewPrivileges=true
-ProtectSystem=full
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  systemctl daemon-reload
-  systemctl enable "$APP"
-  systemctl restart "$APP"
-  LOGHINT="journalctl -u $APP -n 50 --no-pager"
-else
-  echo "    init system: SysV (service / init.d)"
-  apt-get install -y sysvinit-utils >/dev/null 2>&1 || true
-  LOG=/var/log/$APP.log
-  touch "$LOG"; chown "$SVC_USER" "$LOG"
-  cat > /etc/init.d/$APP <<EOF
+# --- SysV init only (this host has no systemd) ----------------------------
+apt-get install -y sysvinit-utils >/dev/null 2>&1 || true
+LOG=/var/log/$APP.log
+touch "$LOG"; chown "$SVC_USER" "$LOG"
+cat > /etc/init.d/$APP <<EOF
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          $APP
@@ -153,10 +122,13 @@ DIR=$DEPLOY_DIR
 RUNUSER=$SVC_USER
 PIDFILE=/var/run/\$NAME.pid
 LOG=$LOG
-CMD="/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p $PORT"
+CMD="/usr/bin/node node_modules/next/dist/bin/next start -H 0.0.0.0 -p $PORT"
 export NODE_ENV=production PORT=$PORT FFMPEG_PATH=/usr/bin/ffmpeg
 
 start() {
+  if [ -f "\$PIDFILE" ] && kill -0 "\$(cat "\$PIDFILE")" 2>/dev/null; then
+    echo "\$NAME already running (pid \$(cat "\$PIDFILE"))"; return 0
+  fi
   echo "Starting \$NAME"
   start-stop-daemon --start --quiet --background --make-pidfile \\
     --pidfile "\$PIDFILE" --chuid "\$RUNUSER" --chdir "\$DIR" \\
@@ -178,16 +150,14 @@ case "\$1" in
   *) echo "Usage: \$0 {start|stop|restart|status}"; exit 1 ;;
 esac
 EOF
-  chmod +x /etc/init.d/$APP
-  command -v update-rc.d >/dev/null 2>&1 && update-rc.d "$APP" defaults >/dev/null 2>&1 || true
-  service "$APP" restart || /etc/init.d/$APP restart
-  LOGHINT="tail -n 50 $LOG"
-fi
+chmod +x /etc/init.d/$APP
+command -v update-rc.d >/dev/null 2>&1 && update-rc.d "$APP" defaults >/dev/null 2>&1 || true
+service "$APP" restart || /etc/init.d/$APP restart
+LOGHINT="tail -n 50 $LOG"
 
 # Let Jenkins restart the service after future deploys, no password.
-# Allow both mechanisms so this works regardless of init system.
 cat > /etc/sudoers.d/$APP <<EOF
-$SVC_USER ALL=(root) NOPASSWD: /usr/sbin/service $APP restart, /usr/sbin/service $APP status, /usr/bin/systemctl restart $APP, /usr/bin/systemctl status $APP
+$SVC_USER ALL=(root) NOPASSWD: /usr/sbin/service $APP restart, /usr/sbin/service $APP status
 EOF
 chmod 440 /etc/sudoers.d/$APP
 
@@ -200,14 +170,16 @@ done
 
 echo
 if [ "$ok" = 1 ]; then
-  echo "✅ Running on http://127.0.0.1:$PORT"
+  echo "✅ Running on http://0.0.0.0:$PORT (reachable at http://<server-ip>:$PORT)"
 else
   echo "⚠️  Service started but health check didn't pass yet. Check:"
   echo "    $LOGHINT"
 fi
 echo
 echo "Next:"
-echo "  • Point a Cloudflare Tunnel hostname at  http://localhost:$PORT"
+echo "  • Reach it over plain HTTP at  http://<server-ip>:$PORT"
+echo "    (binds 0.0.0.0 — make sure the firewall/security group allows :$PORT,"
+echo "     and set NEXT_PUBLIC_APP_URL to that http://<server-ip>:$PORT address)."
 echo "  • Future updates: push to GitHub and run the Jenkins job 'shix-media-server'."
 echo "  • Manage:  sudo service $APP {start|stop|restart|status}"
 echo "  • Edit creds/folders:  sudoedit $ENVF  &&  sudo service $APP restart"
