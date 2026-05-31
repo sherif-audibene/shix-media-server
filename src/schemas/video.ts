@@ -22,9 +22,19 @@ export const videoFileSchema = z.object({
 });
 export type VideoFile = z.infer<typeof videoFileSchema>;
 
+/** A distinct sub-directory within a folder, used to filter the grid. */
+export const videoSubfolderSchema = z.object({
+  /** Folder-relative directory path ("" = the folder root). */
+  path: z.string(),
+  videoCount: z.number().int().min(0),
+});
+export type VideoSubfolder = z.infer<typeof videoSubfolderSchema>;
+
 export const listVideosInputSchema = z.object({
   folderId: z.string().min(1),
   search: z.string().trim().max(200).optional(),
+  /** Restrict to a single sub-directory ("" = root). Omit to list all. */
+  subPath: z.string().max(1024).optional(),
   page: z.number().int().min(0).default(0),
   pageSize: z.number().int().min(1).max(500).default(100),
 });
