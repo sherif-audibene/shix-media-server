@@ -1,49 +1,67 @@
 #!/usr/bin/env bash
-# One-time server provisioning for shix-media-server (bare-metal, behind
-# Cloudflare, HTTP origin on 127.0.0.1:6302). Run ONCE as root:
+# One-shot installer for shix-media-server on Debian/Ubuntu.
+# Installs prerequisites, fetches + builds the app, configures it, and starts
+# it as a systemd service on 127.0.0.1:6302 (front it with Cloudflare Tunnel).
 #
 #   sudo bash provision.sh
 #
-# Idempotent: safe to re-run. Prompts for app credentials + video paths the
-# first time (they are written only to /opt/shix-media-server/.env.local).
+# Idempotent: re-running updates code + rebuilds, and keeps your existing
+# /opt/shix-media-server/.env.local untouched.
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
 APP=shix-media-server
 DEPLOY_DIR=/opt/$APP
-SVC_USER=jenkins          # the OS user Jenkins runs as on this box
+SVC_USER=jenkins                 # OS user that runs Jenkins (and the service)
 PORT=6302
-ENVF="$DEPLOY_DIR/.env.local"
+REPO=https://github.com/sherif-audibene/shix-media-server.git
+ENVF=$DEPLOY_DIR/.env.local
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Please run with sudo/root." >&2
+  echo "Please run as root:  sudo bash $0" >&2
   exit 1
 fi
+id "$SVC_USER" >/dev/null 2>&1 || { echo "User '$SVC_USER' not found."; exit 1; }
 
-echo "==> Packages: Node 20, ffmpeg, acl, rsync, git"
-if ! command -v node >/dev/null || ! node -v | grep -qE '^v(2[0-9]|[3-9][0-9])'; then
+echo "==> [1/7] System packages (git, ffmpeg, acl, rsync, curl)"
+apt-get update -y
+apt-get install -y ca-certificates curl git acl rsync ffmpeg
+
+echo "==> [2/7] Node.js 20"
+if ! command -v node >/dev/null 2>&1 || ! node -v | grep -qE '^v(2[0-9]|[3-9][0-9])'; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   apt-get install -y nodejs
 fi
-apt-get install -y ffmpeg acl rsync git
+echo "    node $(node -v)"
 
-echo "==> pnpm via corepack (system-wide)"
+echo "==> [3/7] pnpm via corepack"
 corepack enable
-corepack prepare pnpm@10.24.0 --activate || true
+corepack prepare pnpm@10.24.0 --activate
+echo "    pnpm $(pnpm -v)"
 
-echo "==> Deploy dir $DEPLOY_DIR (owned by $SVC_USER)"
-mkdir -p "$DEPLOY_DIR"
-chown -R "$SVC_USER:$SVC_USER" "$DEPLOY_DIR"
+echo "==> [4/7] Source code at $DEPLOY_DIR"
+if [ -d "$DEPLOY_DIR/.git" ]; then
+  git -C "$DEPLOY_DIR" fetch --depth 1 origin main
+  git -C "$DEPLOY_DIR" reset --hard origin/main
+else
+  mkdir -p "$DEPLOY_DIR"
+  git clone --depth 1 "$REPO" "$DEPLOY_DIR"
+fi
 
-echo "==> Environment file"
+echo "==> [5/7] Configuration ($ENVF)"
 if [ -f "$ENVF" ]; then
-  echo "    $ENVF already exists — leaving it untouched."
+  echo "    Exists — leaving it as-is."
 else
   read -rp "    App login username [admin]: " APP_USER; APP_USER=${APP_USER:-admin}
-  read -rsp "    App login password: " APP_PASS; echo
-  while [ -z "${APP_PASS:-}" ]; do read -rsp "    Password cannot be empty: " APP_PASS; echo; done
-  echo "    Video folders, format: Label|/abs/path  (separate multiple with ';')"
+  read -rsp "    App login password (blank = auto-generate): " APP_PASS; echo
+  GEN=0
+  if [ -z "${APP_PASS:-}" ]; then
+    APP_PASS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | cut -c1-16); GEN=1
+  fi
+  echo "    Video folders — format 'Label|/abs/path', separate multiple with ';'"
+  echo "    e.g. Movies|/home/sherifs/media/movies;Downloads|/home/sherifs/Downloads"
   read -rp "    VIDEO_FOLDERS: " VIDEO_FOLDERS
-  read -rp "    Public URL via Cloudflare (e.g. https://media.example.com) [blank ok]: " APP_URL
+  read -rp "    Public Cloudflare URL (https://...; leave blank if unsure): " APP_URL
   SECRET=$(openssl rand -hex 32)
 
   umask 077
@@ -52,7 +70,7 @@ NODE_ENV=production
 PORT=$PORT
 FFMPEG_PATH=/usr/bin/ffmpeg
 
-# Served over HTTPS via Cloudflare, so keep the session cookie Secure.
+# Served over HTTPS via Cloudflare → keep the session cookie Secure.
 AUTH_INSECURE_COOKIE=false
 AUTH_SECRET=$SECRET
 AUTH_USERNAME=$APP_USER
@@ -61,24 +79,28 @@ AUTH_PASSWORD=$APP_PASS
 VIDEO_FOLDERS=$VIDEO_FOLDERS
 NEXT_PUBLIC_APP_URL=$APP_URL
 EOF
-  chown "$SVC_USER:$SVC_USER" "$ENVF"
-  chmod 600 "$ENVF"
-  echo "    Wrote $ENVF (AUTH_SECRET auto-generated)."
+  [ "$GEN" = 1 ] && echo "    >>> Generated app password: $APP_PASS"
 
-  echo "==> Granting '$SVC_USER' read access to video folders"
+  echo "    Granting '$SVC_USER' read access to video folders…"
   IFS=';' read -ra ENTRIES <<< "$VIDEO_FOLDERS"
   for e in "${ENTRIES[@]}"; do
-    p="${e#*|}"; p="$(echo "$p" | xargs)"   # strip label + trim
+    p="${e#*|}"; p="$(echo "$p" | xargs)"
     if [ -d "$p" ]; then
-      setfacl -R -m u:"$SVC_USER":rX "$p" 2>/dev/null \
-        && echo "    +r $p" || echo "    (could not setfacl $p — ensure $SVC_USER can read it)"
+      setfacl -R -m u:"$SVC_USER":rX "$p" 2>/dev/null && echo "      +r $p" \
+        || echo "      (couldn't setfacl $p — ensure $SVC_USER can read it)"
     else
-      echo "    (path not found yet: $p — create it / fix later)"
+      echo "      (path not found yet: $p)"
     fi
   done
 fi
 
-echo "==> systemd unit"
+echo "==> [6/7] Install deps + build"
+cd "$DEPLOY_DIR"
+pnpm install --frozen-lockfile
+pnpm build
+chown -R "$SVC_USER:$SVC_USER" "$DEPLOY_DIR"
+
+echo "==> [7/7] systemd service + Jenkins sudoers"
 cat > /etc/systemd/system/$APP.service <<EOF
 [Unit]
 Description=shix-media-server (Next.js)
@@ -102,18 +124,33 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload
-systemctl enable $APP
 
-echo "==> sudoers: let $SVC_USER restart the service without a password"
+# Let Jenkins restart the service after future deploys, no password.
 echo "$SVC_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart $APP, /usr/bin/systemctl status $APP" \
   > /etc/sudoers.d/$APP
 chmod 440 /etc/sudoers.d/$APP
 
+systemctl daemon-reload
+systemctl enable "$APP"
+systemctl restart "$APP"
+
+echo "==> Health check"
+ok=0
+for _ in $(seq 1 30); do
+  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/login"; then ok=1; break; fi
+  sleep 1
+done
+
 echo
-echo "Done. Versions:"
-echo "  node $(node -v) | pnpm $(sudo -u $SVC_USER pnpm -v 2>/dev/null || echo '?') | ffmpeg $(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}')"
+if [ "$ok" = 1 ]; then
+  echo "✅ Running on http://127.0.0.1:$PORT"
+else
+  echo "⚠️  Service started but health check didn't pass yet. Check:"
+  echo "    journalctl -u $APP -n 50 --no-pager"
+fi
 echo
-echo "Next: run the Jenkins job 'shix-media-server' — it builds, rsyncs into"
-echo "$DEPLOY_DIR, and starts the service on 127.0.0.1:$PORT."
-echo "Then point a Cloudflare Tunnel hostname at http://localhost:$PORT."
+echo "Next:"
+echo "  • Point a Cloudflare Tunnel hostname at  http://localhost:$PORT"
+echo "  • Future updates: just push to GitHub and run the Jenkins job"
+echo "    'shix-media-server' (build → rsync into $DEPLOY_DIR → restart)."
+echo "  • Edit creds/folders later:  sudoedit $ENVF  &&  sudo systemctl restart $APP"

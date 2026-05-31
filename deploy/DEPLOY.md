@@ -11,9 +11,15 @@ curl -fsSL https://raw.githubusercontent.com/sherif-audibene/shix-media-server/m
 sudo bash /tmp/provision.sh        # prompts for app user/pass + video paths
 ```
 
-Then run the Jenkins job **shix-media-server** (build → rsync into
-`/opt/shix-media-server` → start on `127.0.0.1:6302`), and add a Cloudflare
-Tunnel ingress: `your-hostname -> http://localhost:6302`.
+This installs everything (Node 20, ffmpeg, pnpm), clones + builds the app,
+writes `/opt/shix-media-server/.env.local`, and starts the systemd service on
+`127.0.0.1:6302`. The app is live after it finishes.
+
+Then add a Cloudflare Tunnel ingress: `your-hostname -> http://localhost:6302`.
+
+**Future updates** are handled by the Jenkins job **shix-media-server**
+(build → rsync into `/opt/shix-media-server` → restart) — the script also adds
+the sudoers rule that lets Jenkins restart the service.
 
 The rest of this doc is the manual/Nginx+TLS reference if you ever move off
 Cloudflare.
