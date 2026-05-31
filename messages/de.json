@@ -1,0 +1,54 @@
+{
+  "Home": {
+    "title": "Next.js + tRPC + MUI Starter",
+    "subtitle": "Durchgängig typisierter Stack mit internationalisierter UI.",
+    "browseVideos": "Videos durchsuchen",
+    "viewUsers": "Benutzer anzeigen"
+  },
+  "Auth": {
+    "title": "Anmelden",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "invalid": "Ungültiger Benutzername oder Passwort"
+  },
+  "Folders": {
+    "title": "Video-Ordner",
+    "back": "Ordner",
+    "configHint": "Keine Ordner konfiguriert. Setze VIDEO_FOLDERS in deiner .env.local (z. B. \"Filme|/pfad/zu/filmen\")."
+  },
+  "Videos": {
+    "empty": "Keine Videos in diesem Ordner gefunden",
+    "count": "{count, plural, =0 {Keine Videos} =1 {# Video} other {# Videos}}",
+    "search": "Videos suchen",
+    "perPage": "Pro Seite"
+  },
+  "Player": {
+    "close": "Schließen"
+  },
+  "Watch": {
+    "upNext": "Mehr in diesem Ordner",
+    "back": "Zurück zu {folder}"
+  },
+  "Users": {
+    "title": "Benutzer",
+    "search": "Benutzer suchen",
+    "columns": {
+      "name": "Name",
+      "email": "E-Mail",
+      "role": "Rolle",
+      "active": "Aktiv",
+      "createdAt": "Erstellt"
+    },
+    "roles": {
+      "admin": "Administrator",
+      "editor": "Bearbeiter",
+      "viewer": "Betrachter"
+    },
+    "active": { "yes": "Ja", "no": "Nein" },
+    "empty": "Keine Benutzer gefunden",
+    "loading": "Benutzer werden geladen…",
+    "rowsPerPage": "Zeilen pro Seite"
+  }
+}
