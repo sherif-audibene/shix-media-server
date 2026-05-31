@@ -2,8 +2,15 @@ import type { Meta, StoryObj } from "@storybook/nextjs";
 import { VideoGrid } from "@/components/VideoGrid/VideoGrid";
 import type { VideoFile } from "@/schemas/video";
 
+// Browser-safe base64url (Storybook's Buffer polyfill lacks "base64url").
+const toBase64Url = (value: string): string =>
+  btoa(unescape(encodeURIComponent(value)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
 const sample = (name: string, relPath: string, size: number): VideoFile => ({
-  id: Buffer.from(relPath).toString("base64url"),
+  id: toBase64Url(relPath),
   name,
   relPath,
   ext: ".mp4",
