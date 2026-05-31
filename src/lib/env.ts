@@ -30,7 +30,13 @@ const serverSchema = z.object({
 });
 
 const clientSchema = z.object({
-  NEXT_PUBLIC_APP_URL: z.url().default("http://localhost:3000"),
+  // Falls back to the default for blank OR invalid values (e.g. a hostname
+  // entered without an https:// scheme) so a cosmetic misconfig never breaks
+  // the build/runtime — the app uses relative URLs in the browser anyway.
+  NEXT_PUBLIC_APP_URL: z
+    .url()
+    .default("http://localhost:3000")
+    .catch("http://localhost:3000"),
 });
 
 const merged = serverSchema.merge(clientSchema);
@@ -43,8 +49,10 @@ const merged = serverSchema.merge(clientSchema);
 // Treat blank env vars ("") as unset, so schema defaults / .optional() apply
 // (e.g. an empty NEXT_PUBLIC_APP_URL falls back to its default instead of
 // failing url validation).
-const blankToUndef = (v: string | undefined): string | undefined =>
-  v && v.trim() !== "" ? v : undefined;
+const blankToUndef = (v: string | undefined): string | undefined => {
+  const t = v?.trim();
+  return t ? t : undefined;
+};
 
 const rawEnv = {
   NODE_ENV: process.env.NODE_ENV,

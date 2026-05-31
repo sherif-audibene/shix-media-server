@@ -40,6 +40,7 @@ corepack prepare pnpm@10.24.0 --activate
 echo "    pnpm $(pnpm -v)"
 
 echo "==> [4/7] Source code at $DEPLOY_DIR"
+git config --global --add safe.directory "$DEPLOY_DIR" 2>/dev/null || true
 if [ -d "$DEPLOY_DIR/.git" ]; then
   git -C "$DEPLOY_DIR" fetch --depth 1 origin main
   git -C "$DEPLOY_DIR" reset --hard origin/main
