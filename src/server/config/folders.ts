@@ -3,7 +3,7 @@ import "server-only";
 import path from "node:path";
 import { promises as fs, type Dirent } from "node:fs";
 import { env } from "@/lib/env";
-import type { VideoFile, VideoSubfolder } from "@/schemas/video";
+import type { VideoFile, VideoFolderNode } from "@/schemas/video";
 
 export interface VideoFolderConfig {
   id: string;
@@ -226,18 +226,46 @@ export async function listVideos(
   return scan;
 }
 
-/** Distinct sub-directories within a folder, each with its video count. */
-export async function listSubfolders(
+/**
+ * The folder's full directory tree as a flat, path-sorted node list. Includes
+ * the root ("") and every intermediate directory — even ones that hold only
+ * sub-folders — so the client can drill down level by level. Each node carries
+ * its direct video count and its recursive (subtree) total.
+ */
+export async function listFolderTree(
   folder: VideoFolderConfig,
-): Promise<VideoSubfolder[]> {
+): Promise<VideoFolderNode[]> {
   const all = await listVideos(folder);
-  const counts = new Map<string, number>();
+
+  const direct = new Map<string, number>();
+  const dirs = new Set<string>([""]); // root always exists
+
   for (const video of all) {
     const dir = videoSubPath(video.relPath);
-    counts.set(dir, (counts.get(dir) ?? 0) + 1);
+    direct.set(dir, (direct.get(dir) ?? 0) + 1);
+    // Register every ancestor directory up to the root.
+    for (let p = dir; p !== ""; ) {
+      dirs.add(p);
+      const slash = p.lastIndexOf("/");
+      p = slash === -1 ? "" : p.slice(0, slash);
+    }
   }
-  return [...counts.entries()]
-    .map(([path, videoCount]) => ({ path, videoCount }))
+
+  return [...dirs]
+    .map((path) => {
+      let totalCount = 0;
+      for (const [dir, count] of direct) {
+        if (path === "" || dir === path || dir.startsWith(`${path}/`)) {
+          totalCount += count;
+        }
+      }
+      return {
+        path,
+        name: path === "" ? "" : path.slice(path.lastIndexOf("/") + 1),
+        videoCount: direct.get(path) ?? 0,
+        totalCount,
+      };
+    })
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
