@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations, useFormatter } from "next-intl";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import MovieIcon from "@mui/icons-material/Movie";
 import type { VideoFile } from "@/schemas/video";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import {
   formatBytes,
   videoStreamUrl,
@@ -57,13 +57,34 @@ function RailThumb({
 export function WatchView({ folderId, current, videos }: WatchViewProps) {
   const t = useTranslations("Watch");
   const format = useFormatter();
-  const others = videos;
+  const router = useRouter();
+
+  // Rail order: by name (locale-aware), so "up next" follows what's listed.
+  const others = useMemo(
+    () => [...videos].sort((a, b) => a.name.localeCompare(b.name)),
+    [videos],
+  );
+
+  // The next video in the sub-folder, played automatically when this one ends.
+  const next = useMemo(() => {
+    const index = others.findIndex((v) => v.id === current.id);
+    return index >= 0 ? others[index + 1] : undefined;
+  }, [others, current.id]);
 
   return (
     <Layout>
       <Stack spacing={2}>
         <PlayerSurface>
-          <video key={current.id} controls autoPlay playsInline preload="metadata">
+          <video
+            key={current.id}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            onEnded={() => {
+              if (next) router.push(watchHref(folderId, next.id));
+            }}
+          >
             <source
               src={videoStreamUrl(folderId, current.id)}
               type={current.mimeType}

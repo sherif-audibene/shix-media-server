@@ -9,6 +9,7 @@ import { routing } from "@/i18n/routing";
 import { Link } from "@/i18n/navigation";
 import { trpc } from "@/trpc/server";
 import { requireUser } from "@/server/auth/currentUser";
+import { videoSubPath } from "@/server/config/folders";
 import type { ListVideosOutput, VideoFile } from "@/schemas/video";
 import { WatchView } from "@/components/WatchView/WatchView";
 
@@ -28,10 +29,14 @@ export default async function WatchPage({
   let data: ListVideosOutput;
   let current: VideoFile;
   try {
-    [current, data] = await Promise.all([
-      trpc.folder.video({ folderId, videoId }),
-      trpc.folder.videos({ folderId }),
-    ]);
+    current = await trpc.folder.video({ folderId, videoId });
+    // The "more in this folder" rail lists only the current video's
+    // sub-folder, sorted by name, with enough room to hold the whole folder.
+    data = await trpc.folder.videos({
+      folderId,
+      subPath: videoSubPath(current.relPath),
+      pageSize: 500,
+    });
   } catch {
     notFound();
   }
