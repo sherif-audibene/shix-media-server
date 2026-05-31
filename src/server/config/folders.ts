@@ -3,7 +3,7 @@ import "server-only";
 import path from "node:path";
 import { promises as fs, type Dirent } from "node:fs";
 import { env } from "@/lib/env";
-import type { VideoFile } from "@/schemas/video";
+import type { VideoFile, VideoSubfolder } from "@/schemas/video";
 
 export interface VideoFolderConfig {
   id: string;
@@ -69,6 +69,16 @@ export function getFolders(): VideoFolderConfig[] {
 
 export function getFolder(id: string): VideoFolderConfig | null {
   return getFolders().find((f) => f.id === id) ?? null;
+}
+
+/**
+ * The sub-directory a folder-relative path lives in, normalized to "/"
+ * separators. Returns "" for files directly in the folder root.
+ */
+export function videoSubPath(relPath: string): string {
+  const dir = path.dirname(relPath);
+  if (dir === "." || dir === path.sep) return "";
+  return dir.split(path.sep).join("/");
 }
 
 /** Encode/decode a folder-relative path as a URL-safe id. */
@@ -214,6 +224,21 @@ export async function listVideos(
 
   inflightScans.set(folder.id, scan);
   return scan;
+}
+
+/** Distinct sub-directories within a folder, each with its video count. */
+export async function listSubfolders(
+  folder: VideoFolderConfig,
+): Promise<VideoSubfolder[]> {
+  const all = await listVideos(folder);
+  const counts = new Map<string, number>();
+  for (const video of all) {
+    const dir = videoSubPath(video.relPath);
+    counts.set(dir, (counts.get(dir) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([path, videoCount]) => ({ path, videoCount }))
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** Drop cached scans (a specific folder, or all). */

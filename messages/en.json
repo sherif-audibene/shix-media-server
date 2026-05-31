@@ -22,7 +22,10 @@
     "empty": "No videos found in this folder",
     "count": "{count, plural, =0 {No videos} =1 {# video} other {# videos}}",
     "search": "Search videos",
-    "perPage": "Per page"
+    "perPage": "Per page",
+    "folder": "Sub-folder",
+    "allVideos": "All videos",
+    "rootFolder": "Top level"
   },
   "Player": {
     "close": "Close"

@@ -5,13 +5,16 @@ import {
   getFolder,
   getFolders,
   getVideoFile,
+  listSubfolders,
   listVideos,
+  videoSubPath,
 } from "@/server/config/folders";
 import {
   listVideosInputSchema,
   listVideosOutputSchema,
   videoFileSchema,
   videoFolderSchema,
+  videoSubfolderSchema,
 } from "@/schemas/video";
 
 export const folderRouter = router({
@@ -31,14 +34,19 @@ export const folderRouter = router({
       }
       const all = await listVideos(folder);
 
+      const scoped =
+        input.subPath === undefined
+          ? all
+          : all.filter((v) => videoSubPath(v.relPath) === input.subPath);
+
       const term = input.search?.toLowerCase();
       const matched = term
-        ? all.filter(
+        ? scoped.filter(
             (v) =>
               v.name.toLowerCase().includes(term) ||
               v.relPath.toLowerCase().includes(term),
           )
-        : all;
+        : scoped;
 
       const total = matched.length;
       const start = input.page * input.pageSize;
@@ -51,6 +59,18 @@ export const folderRouter = router({
         page: input.page,
         pageSize: input.pageSize,
       };
+    }),
+
+  /** Distinct sub-directories inside a folder (for the sub-folder filter). */
+  subfolders: publicProcedure
+    .input(z.object({ folderId: z.string().min(1) }))
+    .output(z.array(videoSubfolderSchema))
+    .query(async ({ input }) => {
+      const folder = getFolder(input.folderId);
+      if (!folder) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Unknown folder" });
+      }
+      return listSubfolders(folder);
     }),
 
   /** Single video's metadata by id (used by the watch page). */

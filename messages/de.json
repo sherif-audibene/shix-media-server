@@ -22,7 +22,10 @@
     "empty": "Keine Videos in diesem Ordner gefunden",
     "count": "{count, plural, =0 {Keine Videos} =1 {# Video} other {# Videos}}",
     "search": "Videos suchen",
-    "perPage": "Pro Seite"
+    "perPage": "Pro Seite",
+    "folder": "Unterordner",
+    "allVideos": "Alle Videos",
+    "rootFolder": "Oberste Ebene"
   },
   "Player": {
     "close": "Schließen"
