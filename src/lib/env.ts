@@ -40,14 +40,20 @@ const merged = serverSchema.merge(clientSchema);
  * so we must reference them statically. We build the raw object explicitly
  * rather than spreading `process.env`.
  */
+// Treat blank env vars ("") as unset, so schema defaults / .optional() apply
+// (e.g. an empty NEXT_PUBLIC_APP_URL falls back to its default instead of
+// failing url validation).
+const blankToUndef = (v: string | undefined): string | undefined =>
+  v && v.trim() !== "" ? v : undefined;
+
 const rawEnv = {
   NODE_ENV: process.env.NODE_ENV,
-  AUTH_SECRET: process.env.AUTH_SECRET,
-  AUTH_USERNAME: process.env.AUTH_USERNAME,
-  AUTH_PASSWORD: process.env.AUTH_PASSWORD,
-  AUTH_INSECURE_COOKIE: process.env.AUTH_INSECURE_COOKIE,
-  VIDEO_FOLDERS: process.env.VIDEO_FOLDERS,
-  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  AUTH_SECRET: blankToUndef(process.env.AUTH_SECRET),
+  AUTH_USERNAME: blankToUndef(process.env.AUTH_USERNAME),
+  AUTH_PASSWORD: blankToUndef(process.env.AUTH_PASSWORD),
+  AUTH_INSECURE_COOKIE: blankToUndef(process.env.AUTH_INSECURE_COOKIE),
+  VIDEO_FOLDERS: blankToUndef(process.env.VIDEO_FOLDERS),
+  NEXT_PUBLIC_APP_URL: blankToUndef(process.env.NEXT_PUBLIC_APP_URL),
 };
 
 const parsed = merged.safeParse(rawEnv);
