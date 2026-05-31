@@ -8,6 +8,10 @@ pipeline {
 
   environment {
     DEPLOY_DIR = '/opt/shix-media-server'
+    // corepack downloads the pinned pnpm into its cache; the default XDG cache
+    // (/config/xdg/cache) isn't writable by the agent user. Point it at the
+    // always-writable workspace to avoid EACCES on `pnpm install`.
+    COREPACK_HOME = "${WORKSPACE}/.corepack"
   }
 
   options {
