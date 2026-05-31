@@ -23,9 +23,7 @@
     "count": "{count, plural, =0 {No videos} =1 {# video} other {# videos}}",
     "search": "Search videos",
     "perPage": "Per page",
-    "folder": "Sub-folder",
-    "allVideos": "All videos",
-    "rootFolder": "Top level"
+    "home": "Home"
   },
   "Player": {
     "close": "Close"

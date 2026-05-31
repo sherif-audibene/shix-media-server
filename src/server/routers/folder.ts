@@ -5,7 +5,7 @@ import {
   getFolder,
   getFolders,
   getVideoFile,
-  listSubfolders,
+  listFolderTree,
   listVideos,
   videoSubPath,
 } from "@/server/config/folders";
@@ -13,8 +13,8 @@ import {
   listVideosInputSchema,
   listVideosOutputSchema,
   videoFileSchema,
+  videoFolderNodeSchema,
   videoFolderSchema,
-  videoSubfolderSchema,
 } from "@/schemas/video";
 
 export const folderRouter = router({
@@ -61,16 +61,16 @@ export const folderRouter = router({
       };
     }),
 
-  /** Distinct sub-directories inside a folder (for the sub-folder filter). */
-  subfolders: publicProcedure
+  /** The folder's directory tree (for Explorer-style drill-down navigation). */
+  tree: publicProcedure
     .input(z.object({ folderId: z.string().min(1) }))
-    .output(z.array(videoSubfolderSchema))
+    .output(z.array(videoFolderNodeSchema))
     .query(async ({ input }) => {
       const folder = getFolder(input.folderId);
       if (!folder) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Unknown folder" });
       }
-      return listSubfolders(folder);
+      return listFolderTree(folder);
     }),
 
   /** Single video's metadata by id (used by the watch page). */

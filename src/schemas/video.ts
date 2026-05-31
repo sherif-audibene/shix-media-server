@@ -22,13 +22,22 @@ export const videoFileSchema = z.object({
 });
 export type VideoFile = z.infer<typeof videoFileSchema>;
 
-/** A distinct sub-directory within a folder, used to filter the grid. */
-export const videoSubfolderSchema = z.object({
-  /** Folder-relative directory path ("" = the folder root). */
+/**
+ * A node in a folder's directory tree — every directory in the hierarchy,
+ * including intermediate ones that only contain sub-folders. Powers the
+ * Windows-Explorer-style drill-down navigation.
+ */
+export const videoFolderNodeSchema = z.object({
+  /** Full folder-relative path ("" = the folder root). */
   path: z.string(),
+  /** Last path segment (display name; "" for the root). */
+  name: z.string(),
+  /** Videos directly in this directory (excluding sub-folders). */
   videoCount: z.number().int().min(0),
+  /** Videos in this directory and all of its descendants. */
+  totalCount: z.number().int().min(0),
 });
-export type VideoSubfolder = z.infer<typeof videoSubfolderSchema>;
+export type VideoFolderNode = z.infer<typeof videoFolderNodeSchema>;
 
 export const listVideosInputSchema = z.object({
   folderId: z.string().min(1),
