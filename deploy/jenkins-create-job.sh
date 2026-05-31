@@ -18,7 +18,7 @@ AUTH="$JENKINS_USER:$JENKINS_TOKEN"
 # CSRF crumb (required for POSTs on modern Jenkins).
 CRUMB_JSON=$(curl -fsS -u "$AUTH" "$JENKINS_URL/crumbIssuer/api/json")
 CRUMB_HEADER=$(printf '%s' "$CRUMB_JSON" | python3 -c \
-  'import sys,json;d=json.load(sys.stdin);print(f"{d[\"crumbRequestField\"]}:{d[\"crumb\"]}")')
+  'import sys,json;d=json.load(sys.stdin);print(d["crumbRequestField"]+":"+d["crumb"])')
 
 # Does the job already exist?
 if curl -fsS -o /dev/null -u "$AUTH" "$JENKINS_URL/job/$JOB/api/json" 2>/dev/null; then
