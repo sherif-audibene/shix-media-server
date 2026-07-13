@@ -41,15 +41,25 @@ export const UpNextItem = styled("div")(({ theme }) => ({
   },
   "& .thumb": {
     position: "relative",
-    aspectRatio: "16 / 9",
+    // padding-top hack instead of aspect-ratio: needs iOS 15+, older
+    // Safari collapses the box to 0 height
+    paddingTop: "56.25%",
     backgroundColor: theme.palette.common.black,
     borderRadius: theme.shape.borderRadius,
     overflow: "hidden",
   },
-  "& .thumb img": {
+  "& .thumb img, & .thumb svg": {
+    position: "absolute",
+    top: 0,
+    left: 0,
     width: "100%",
     height: "100%",
-    objectFit: "cover",
     display: "block",
+  },
+  "& .thumb img": {
+    objectFit: "cover",
+  },
+  "& .thumb svg": {
+    padding: "35%",
   },
 }));

@@ -6,24 +6,35 @@ import { styled } from "@mui/material/styles";
 export const Thumb = styled("div")(({ theme }) => ({
   position: "relative",
   width: "100%",
-  aspectRatio: "16 / 9",
+  // padding-top hack instead of aspect-ratio: needs iOS 15+, older
+  // Safari collapses the box to 0 height (cards render as bare lines)
+  paddingTop: "56.25%",
   backgroundColor: theme.palette.common.black,
   overflow: "hidden",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
   "& video, & img": {
+    position: "absolute",
+    top: 0,
+    left: 0,
     width: "100%",
     height: "100%",
     objectFit: "cover",
     display: "block",
+  },
+  "& > svg": {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
   },
 }));
 
 /** Translucent play badge centered over the thumbnail. */
 export const PlayBadge = styled("div")(({ theme }) => ({
   position: "absolute",
-  inset: 0,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
