@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { keepPreviousData } from "@tanstack/react-query";
 import Alert from "@mui/material/Alert";
@@ -18,19 +19,14 @@ import SearchIcon from "@mui/icons-material/Search";
 import HomeIcon from "@mui/icons-material/Home";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import { api } from "@/trpc/react";
+import { useRouter } from "@/i18n/navigation";
+import { folderHref, parentPath } from "@/lib/video";
 import { VideoCard } from "@/components/VideoCard/VideoCard";
 import { FolderCard } from "@/components/FolderCard/FolderCard";
 import { Grid } from "@/components/VideoGrid/VideoGrid.styled";
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200];
 const DEFAULT_PAGE_SIZE = 100;
-
-/** Immediate parent path of a folder path ("" = root; null for the root). */
-function parentOf(path: string): string | null {
-  if (path === "") return null;
-  const slash = path.lastIndexOf("/");
-  return slash === -1 ? "" : path.slice(0, slash);
-}
 
 /**
  * Explorer-style folder browser: drill into sub-folders one level at a time
@@ -39,7 +35,10 @@ function parentOf(path: string): string | null {
  */
 export function VideoBrowser({ folderId }: { folderId: string }) {
   const t = useTranslations("Videos");
-  const [path, setPath] = useState("");
+  const router = useRouter();
+  // The current sub-folder lives in the URL (?path=), so the browser's back
+  // button walks back up the directory tree instead of leaving the folder.
+  const path = useSearchParams().get("path") ?? "";
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [page, setPage] = useState(0);
@@ -56,6 +55,10 @@ export function VideoBrowser({ folderId }: { folderId: string }) {
 
   const searching = debounced.length > 0;
 
+  useEffect(() => {
+    setPage(0);
+  }, [path]);
+
   const tree = api.folder.tree.useQuery({ folderId });
 
   // Folder tiles = the immediate children of the current path (hidden while
@@ -63,7 +66,7 @@ export function VideoBrowser({ folderId }: { folderId: string }) {
   const children = useMemo(() => {
     if (searching || !tree.data) return [];
     return tree.data
-      .filter((node) => parentOf(node.path) === path)
+      .filter((node) => parentPath(node.path) === path)
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [tree.data, path, searching]);
 
@@ -79,7 +82,8 @@ export function VideoBrowser({ folderId }: { folderId: string }) {
   );
 
   const pageCount = useMemo(
-    () => (query.data ? Math.max(1, Math.ceil(query.data.total / pageSize)) : 1),
+    () =>
+      query.data ? Math.max(1, Math.ceil(query.data.total / pageSize)) : 1,
     [query.data, pageSize],
   );
 
@@ -94,12 +98,14 @@ export function VideoBrowser({ folderId }: { folderId: string }) {
   }, [path]);
 
   const goTo = (next: string) => {
-    setPath(next);
     setPage(0);
+    router.push(folderHref(folderId, next));
   };
 
   const videos = query.data?.videos ?? [];
-  const isEmpty = !searching ? children.length === 0 && videos.length === 0 : videos.length === 0;
+  const isEmpty = !searching
+    ? children.length === 0 && videos.length === 0
+    : videos.length === 0;
 
   return (
     <Stack spacing={2}>

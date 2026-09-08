@@ -12,6 +12,7 @@ import { requireUser } from "@/server/auth/currentUser";
 import { videoSubPath } from "@/server/config/folders";
 import type { ListVideosOutput, VideoFile } from "@/schemas/video";
 import { WatchView } from "@/components/WatchView/WatchView";
+import { folderHref } from "@/lib/video";
 
 export const dynamic = "force-dynamic";
 
@@ -41,21 +42,24 @@ export default async function WatchPage({
     notFound();
   }
 
+  // Back returns to the sub-folder the video lives in, not the folder root.
+  const subPath = videoSubPath(current.relPath);
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Stack spacing={3}>
         <Stack direction="row" alignItems="center">
-          <Link href={`/folders/${folderId}`}>
+          <Link href={folderHref(folderId, subPath)}>
             <Button startIcon={<ArrowBackIcon />} color="inherit">
-              {t("back", { folder: data.folder.label })}
+              {t("back", {
+                folder: subPath
+                  ? subPath.slice(subPath.lastIndexOf("/") + 1)
+                  : data.folder.label,
+              })}
             </Button>
           </Link>
         </Stack>
-        <WatchView
-          folderId={folderId}
-          current={current}
-          videos={data.videos}
-        />
+        <WatchView folderId={folderId} current={current} videos={data.videos} />
       </Stack>
     </Container>
   );

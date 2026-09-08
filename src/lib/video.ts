@@ -26,3 +26,16 @@ export function formatBytes(bytes: number): string {
   const value = bytes / 1024 ** i;
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
+
+/** Locale-relative path to a folder, optionally deep-linked to a sub-folder. */
+export function folderHref(folderId: string, subPath = ""): string {
+  const base = `/folders/${folderId}`;
+  return subPath ? `${base}?path=${encodeURIComponent(subPath)}` : base;
+}
+
+/** Immediate parent of a folder-relative path ("" = root, null above root). */
+export function parentPath(path: string): string | null {
+  if (path === "") return null;
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? "" : path.slice(0, slash);
+}

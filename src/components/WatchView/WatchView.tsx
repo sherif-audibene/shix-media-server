@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import { useTranslations, useFormatter } from "next-intl";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
 import MovieIcon from "@mui/icons-material/Movie";
+import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
+import SkipNextIcon from "@mui/icons-material/SkipNext";
 import type { VideoFile } from "@/schemas/video";
 import { Link, useRouter } from "@/i18n/navigation";
 import {
@@ -65,10 +68,13 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
     [videos],
   );
 
-  // The next video in the sub-folder, played automatically when this one ends.
-  const next = useMemo(() => {
+  // Neighbours in the rail order: previous, and the next one — which also
+  // plays automatically when this video ends.
+  const [previous, next] = useMemo(() => {
     const index = others.findIndex((v) => v.id === current.id);
-    return index >= 0 ? others[index + 1] : undefined;
+    return index < 0
+      ? [undefined, undefined]
+      : [others[index - 1], others[index + 1]];
   }, [others, current.id]);
 
   return (
@@ -91,6 +97,28 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
             />
           </video>
         </PlayerSurface>
+        <Stack direction="row" spacing={1} justifyContent="space-between">
+          <Button
+            disabled={!previous}
+            startIcon={<SkipPreviousIcon />}
+            color="inherit"
+            title={previous?.name}
+            onClick={() =>
+              previous && router.push(watchHref(folderId, previous.id))
+            }
+          >
+            {t("previous")}
+          </Button>
+          <Button
+            disabled={!next}
+            endIcon={<SkipNextIcon />}
+            color="inherit"
+            title={next?.name}
+            onClick={() => next && router.push(watchHref(folderId, next.id))}
+          >
+            {t("next")}
+          </Button>
+        </Stack>
         <div>
           <Typography variant="h5" fontWeight={700}>
             {current.name}
