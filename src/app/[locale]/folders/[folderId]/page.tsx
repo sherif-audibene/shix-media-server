@@ -11,13 +11,17 @@ import { Link } from "@/i18n/navigation";
 import { trpc } from "@/trpc/server";
 import { requireUser } from "@/server/auth/currentUser";
 import { VideoBrowser } from "@/components/VideoBrowser/VideoBrowser";
+import { folderHref, parentPath } from "@/lib/video";
 
 export default async function FolderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; folderId: string }>;
+  searchParams: Promise<{ path?: string }>;
 }) {
   const { locale, folderId } = await params;
+  const { path = "" } = await searchParams;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
   await requireUser();
@@ -27,13 +31,23 @@ export default async function FolderPage({
   const folder = folders.find((f) => f.id === folderId);
   if (!folder) notFound();
 
+  // Back walks one level up the directory tree, leaving the folder only from
+  // its root.
+  const parent = parentPath(path);
+
   return (
     <Container maxWidth="xl" sx={{ py: 6 }}>
       <Stack spacing={3}>
         <Stack direction="row" spacing={2} alignItems="center">
-          <Link href="/folders">
+          <Link
+            href={parent === null ? "/folders" : folderHref(folderId, parent)}
+          >
             <Button startIcon={<ArrowBackIcon />} color="inherit">
-              {t("back")}
+              {parent === null
+                ? t("back")
+                : parent === ""
+                  ? folder.label
+                  : parent.slice(parent.lastIndexOf("/") + 1)}
             </Button>
           </Link>
         </Stack>

@@ -30,7 +30,9 @@
   },
   "Watch": {
     "upNext": "More in this folder",
-    "back": "Back to {folder}"
+    "back": "Back to {folder}",
+    "previous": "Previous",
+    "next": "Next"
   },
   "Users": {
     "title": "Users",
@@ -47,7 +49,10 @@
       "editor": "Editor",
       "viewer": "Viewer"
     },
-    "active": { "yes": "Yes", "no": "No" },
+    "active": {
+      "yes": "Yes",
+      "no": "No"
+    },
     "empty": "No users found",
     "loading": "Loading users…",
     "rowsPerPage": "Rows per page"
