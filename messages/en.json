@@ -32,7 +32,9 @@
     "upNext": "More in this folder",
     "back": "Back to {folder}",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "cinema": "Cinema mode",
+    "cinemaHint": "Keep fullscreen when the next video starts"
   },
   "Users": {
     "title": "Users",

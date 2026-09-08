@@ -32,7 +32,9 @@
     "upNext": "Mehr in diesem Ordner",
     "back": "Zurück zu {folder}",
     "previous": "Vorheriges",
-    "next": "Nächstes"
+    "next": "Nächstes",
+    "cinema": "Kinomodus",
+    "cinemaHint": "Vollbild beim nächsten Video beibehalten"
   },
   "Users": {
     "title": "Benutzer",
