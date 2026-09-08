@@ -34,7 +34,9 @@
     "previous": "Previous",
     "next": "Next",
     "cinema": "Cinema mode",
-    "cinemaHint": "Keep fullscreen when the next video starts"
+    "cinemaHint": "Keep fullscreen when the next video starts",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen"
   },
   "Users": {
     "title": "Users",
