@@ -34,7 +34,9 @@
     "previous": "Vorheriges",
     "next": "Nächstes",
     "cinema": "Kinomodus",
-    "cinemaHint": "Vollbild beim nächsten Video beibehalten"
+    "cinemaHint": "Vollbild beim nächsten Video beibehalten",
+    "fullscreen": "Vollbild",
+    "exitFullscreen": "Vollbild beenden"
   },
   "Users": {
     "title": "Benutzer",

@@ -7,9 +7,12 @@ import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
+import IconButton from "@mui/material/IconButton";
 import MovieIcon from "@mui/icons-material/Movie";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
+import FullscreenIcon from "@mui/icons-material/Fullscreen";
+import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import type { VideoFile } from "@/schemas/video";
 import { Link, useRouter } from "@/i18n/navigation";
 import {
@@ -20,6 +23,7 @@ import {
 } from "@/lib/video";
 import {
   Layout,
+  Overlay,
   PlayerSurface,
   UpNextItem,
 } from "@/components/WatchView/WatchView.styled";
@@ -30,6 +34,7 @@ const CINEMA_KEY = "shix:cinema";
 /** iOS Safari has no Element.requestFullscreen; it flags the video instead. */
 type MaybeIosVideo = HTMLVideoElement & {
   webkitDisplayingFullscreen?: boolean;
+  webkitEnterFullscreen?: () => void;
 };
 
 /** True while a video is showing fullscreen, including iOS's native player. */
@@ -80,11 +85,26 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
   const format = useFormatter();
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   // What the player shows: normally the server-rendered video, but cinema
   // mode swaps it in place (no route change) to keep fullscreen alive.
   const [playing, setPlaying] = useState(current);
   const [cinema, setCinema] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setFullscreen(isFullscreen(videoRef.current));
+    document.addEventListener("fullscreenchange", sync);
+    const el = videoRef.current;
+    el?.addEventListener("webkitbeginfullscreen", sync);
+    el?.addEventListener("webkitendfullscreen", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      el?.removeEventListener("webkitbeginfullscreen", sync);
+      el?.removeEventListener("webkitendfullscreen", sync);
+    };
+  }, []);
 
   // localStorage exists only on the client, so read the flag after mount.
   useEffect(() => setCinema(localStorage.getItem(CINEMA_KEY) === "1"), []);
@@ -116,15 +136,35 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
       : [others[index - 1], others[index + 1]];
   }, [others, playing.id]);
 
-  /** Move to another video: in place while fullscreen, else a page change. */
+  /**
+   * Move to another video. While fullscreen, swap the source in place so the
+   * session survives — but only let a finished video carry on by itself when
+   * cinema mode is on; a click is always meant to stay fullscreen.
+   */
   const go = useCallback(
-    (video: VideoFile | undefined) => {
+    (video: VideoFile | undefined, autoplayed = false) => {
       if (!video) return;
-      if (cinema && isFullscreen(videoRef.current)) setPlaying(video);
+      if (isFullscreen(videoRef.current) && (cinema || !autoplayed))
+        setPlaying(video);
       else router.push(watchHref(folderId, video.id));
     },
     [cinema, folderId, router],
   );
+
+  /** Fullscreen the container, so the overlay can sit above the picture. */
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    const surface = surfaceRef.current;
+    if (surface?.requestFullscreen) {
+      void surface.requestFullscreen().catch(() => {});
+      return;
+    }
+    // iOS: only the video itself can go fullscreen, so no overlay there.
+    (videoRef.current as MaybeIosVideo | null)?.webkitEnterFullscreen?.();
+  }, []);
 
   // In-place swaps leave the URL pointing at the video we started from; put
   // it back in sync as soon as the user leaves fullscreen.
@@ -145,20 +185,48 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
   return (
     <Layout>
       <Stack spacing={2}>
-        <PlayerSurface>
+        <PlayerSurface ref={surfaceRef}>
           <video
             ref={videoRef}
             controls
             autoPlay
             playsInline
             preload="metadata"
-            onEnded={() => go(next)}
+            onEnded={() => go(next, true)}
           >
             <source
               src={videoStreamUrl(folderId, playing.id)}
               type={playing.mimeType}
             />
           </video>
+          <Overlay className="overlay">
+            <IconButton
+              className="skip prev"
+              disabled={!previous}
+              aria-label={t("previous")}
+              title={previous?.name ?? t("previous")}
+              onClick={() => go(previous)}
+            >
+              <SkipPreviousIcon fontSize="large" />
+            </IconButton>
+            <IconButton
+              className="skip next"
+              disabled={!next}
+              aria-label={t("next")}
+              title={next?.name ?? t("next")}
+              onClick={() => go(next)}
+            >
+              <SkipNextIcon fontSize="large" />
+            </IconButton>
+            <IconButton
+              className="fullscreen"
+              aria-label={fullscreen ? t("exitFullscreen") : t("fullscreen")}
+              title={fullscreen ? t("exitFullscreen") : t("fullscreen")}
+              onClick={toggleFullscreen}
+            >
+              {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+            </IconButton>
+          </Overlay>
         </PlayerSurface>
         <Stack direction="row" spacing={1} justifyContent="space-between">
           <Button
