@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations, useFormatter } from "next-intl";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Switch from "@mui/material/Switch";
 import MovieIcon from "@mui/icons-material/Movie";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
@@ -21,6 +23,22 @@ import {
   PlayerSurface,
   UpNextItem,
 } from "@/components/WatchView/WatchView.styled";
+
+/** localStorage key for the cinema-mode preference. */
+const CINEMA_KEY = "shix:cinema";
+
+/** iOS Safari has no Element.requestFullscreen; it flags the video instead. */
+type MaybeIosVideo = HTMLVideoElement & {
+  webkitDisplayingFullscreen?: boolean;
+};
+
+/** True while a video is showing fullscreen, including iOS's native player. */
+function isFullscreen(video: HTMLVideoElement | null): boolean {
+  return Boolean(
+    document.fullscreenElement ||
+    (video as MaybeIosVideo | null)?.webkitDisplayingFullscreen,
+  );
+}
 
 export interface WatchViewProps {
   folderId: string;
@@ -61,6 +79,27 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
   const t = useTranslations("Watch");
   const format = useFormatter();
   const router = useRouter();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // What the player shows: normally the server-rendered video, but cinema
+  // mode swaps it in place (no route change) to keep fullscreen alive.
+  const [playing, setPlaying] = useState(current);
+  const [cinema, setCinema] = useState(false);
+
+  // localStorage exists only on the client, so read the flag after mount.
+  useEffect(() => setCinema(localStorage.getItem(CINEMA_KEY) === "1"), []);
+
+  // A real navigation (rail click, direct link, back button) always wins.
+  useEffect(() => setPlaying(current), [current]);
+
+  // Same element, new source: reload and keep going. Remounting the <video>
+  // — which a route change does — would drop the fullscreen session.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.load();
+    void el.play().catch(() => {});
+  }, [playing.id]);
 
   // Rail order: by name (locale-aware), so "up next" follows what's listed.
   const others = useMemo(
@@ -71,29 +110,53 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
   // Neighbours in the rail order: previous, and the next one — which also
   // plays automatically when this video ends.
   const [previous, next] = useMemo(() => {
-    const index = others.findIndex((v) => v.id === current.id);
+    const index = others.findIndex((v) => v.id === playing.id);
     return index < 0
       ? [undefined, undefined]
       : [others[index - 1], others[index + 1]];
-  }, [others, current.id]);
+  }, [others, playing.id]);
+
+  /** Move to another video: in place while fullscreen, else a page change. */
+  const go = useCallback(
+    (video: VideoFile | undefined) => {
+      if (!video) return;
+      if (cinema && isFullscreen(videoRef.current)) setPlaying(video);
+      else router.push(watchHref(folderId, video.id));
+    },
+    [cinema, folderId, router],
+  );
+
+  // In-place swaps leave the URL pointing at the video we started from; put
+  // it back in sync as soon as the user leaves fullscreen.
+  useEffect(() => {
+    if (playing.id === current.id) return;
+    const el = videoRef.current;
+    const sync = () => {
+      if (!isFullscreen(el)) router.replace(watchHref(folderId, playing.id));
+    };
+    document.addEventListener("fullscreenchange", sync);
+    el?.addEventListener("webkitendfullscreen", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      el?.removeEventListener("webkitendfullscreen", sync);
+    };
+  }, [playing.id, current.id, folderId, router]);
 
   return (
     <Layout>
       <Stack spacing={2}>
         <PlayerSurface>
           <video
-            key={current.id}
+            ref={videoRef}
             controls
             autoPlay
             playsInline
             preload="metadata"
-            onEnded={() => {
-              if (next) router.push(watchHref(folderId, next.id));
-            }}
+            onEnded={() => go(next)}
           >
             <source
-              src={videoStreamUrl(folderId, current.id)}
-              type={current.mimeType}
+              src={videoStreamUrl(folderId, playing.id)}
+              type={playing.mimeType}
             />
           </video>
         </PlayerSurface>
@@ -103,31 +166,46 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
             startIcon={<SkipPreviousIcon />}
             color="inherit"
             title={previous?.name}
-            onClick={() =>
-              previous && router.push(watchHref(folderId, previous.id))
-            }
+            onClick={() => go(previous)}
           >
             {t("previous")}
           </Button>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={cinema}
+                onChange={(e) => {
+                  setCinema(e.target.checked);
+                  localStorage.setItem(
+                    CINEMA_KEY,
+                    e.target.checked ? "1" : "0",
+                  );
+                }}
+              />
+            }
+            label={t("cinema")}
+            title={t("cinemaHint")}
+          />
           <Button
             disabled={!next}
             endIcon={<SkipNextIcon />}
             color="inherit"
             title={next?.name}
-            onClick={() => next && router.push(watchHref(folderId, next.id))}
+            onClick={() => go(next)}
           >
             {t("next")}
           </Button>
         </Stack>
         <div>
           <Typography variant="h5" fontWeight={700}>
-            {current.name}
+            {playing.name}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {formatBytes(current.size)} ·{" "}
-            {format.dateTime(current.modifiedAt, { dateStyle: "medium" })}
-            {current.relPath.includes("/")
-              ? ` · ${current.relPath.slice(0, current.relPath.lastIndexOf("/"))}`
+            {formatBytes(playing.size)} ·{" "}
+            {format.dateTime(playing.modifiedAt, { dateStyle: "medium" })}
+            {playing.relPath.includes("/")
+              ? ` · ${playing.relPath.slice(0, playing.relPath.lastIndexOf("/"))}`
               : ""}
           </Typography>
         </div>
@@ -138,7 +216,7 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
           {t("upNext")}
         </Typography>
         {others.map((video) => {
-          const active = video.id === current.id;
+          const active = video.id === playing.id;
           return (
             <Link key={video.id} href={watchHref(folderId, video.id)}>
               <UpNextItem data-active={active}>
