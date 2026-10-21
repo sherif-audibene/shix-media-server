@@ -9,6 +9,7 @@ import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
 import Alert from "@mui/material/Alert";
 import FolderIcon from "@mui/icons-material/Folder";
+import StarIcon from "@mui/icons-material/Star";
 import { routing } from "@/i18n/routing";
 import { Link } from "@/i18n/navigation";
 import { trpc } from "@/trpc/server";
@@ -28,6 +29,7 @@ export default async function FoldersPage({
   setRequestLocale(locale);
   await requireUser();
   const t = await getTranslations("Folders");
+  const tFav = await getTranslations("Favorites");
 
   const folders = await trpc.folder.list();
 
@@ -42,16 +44,26 @@ export default async function FoldersPage({
           <Alert severity="info">{t("configHint")}</Alert>
         ) : (
           <Grid>
+            <Link href="/favorites">
+              <Card variant="outlined">
+                <CardActionArea>
+                  <CardContent>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <StarIcon color="warning" />
+                      <Typography variant="h6" noWrap>
+                        {tFav("title")}
+                      </Typography>
+                    </Stack>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Link>
             {folders.map((folder) => (
               <Link key={folder.id} href={`/folders/${folder.id}`}>
                 <Card variant="outlined">
                   <CardActionArea>
                     <CardContent>
-                      <Stack
-                        direction="row"
-                        spacing={1.5}
-                        alignItems="center"
-                      >
+                      <Stack direction="row" spacing={1.5} alignItems="center">
                         <FolderIcon color="primary" />
                         <Typography variant="h6" noWrap title={folder.label}>
                           {folder.label}

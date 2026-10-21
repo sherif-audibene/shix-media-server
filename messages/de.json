@@ -36,7 +36,13 @@
     "cinema": "Kinomodus",
     "cinemaHint": "Vollbild beim nächsten Video beibehalten",
     "fullscreen": "Vollbild",
-    "exitFullscreen": "Vollbild beenden"
+    "exitFullscreen": "Vollbild beenden",
+    "favorite": "Favorit",
+    "unfavorite": "Aus Favoriten entfernen",
+    "delete": "Löschen",
+    "deleteTitle": "Dieses Video endgültig löschen?",
+    "deleteBody": "\"{name}\" wird dauerhaft von der Festplatte gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "cancel": "Abbrechen"
   },
   "Users": {
     "title": "Benutzer",
@@ -60,5 +66,9 @@
     "empty": "Keine Benutzer gefunden",
     "loading": "Benutzer werden geladen…",
     "rowsPerPage": "Zeilen pro Seite"
+  },
+  "Favorites": {
+    "title": "Favoriten",
+    "empty": "Noch keine Favoriten. Markiere ein Video auf seiner Seite mit dem Stern."
   }
 }
