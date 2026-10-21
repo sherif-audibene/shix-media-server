@@ -39,6 +39,12 @@ export const videoFolderNodeSchema = z.object({
 });
 export type VideoFolderNode = z.infer<typeof videoFolderNodeSchema>;
 
+/** Identifies one video: its configured folder + its folder-relative id. */
+export const videoRefSchema = z.object({
+  folderId: z.string().min(1),
+  videoId: z.string().min(1),
+});
+
 export const listVideosInputSchema = z.object({
   folderId: z.string().min(1),
   search: z.string().trim().max(200).optional(),

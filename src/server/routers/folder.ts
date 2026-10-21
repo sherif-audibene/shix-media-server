@@ -1,20 +1,29 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { router, publicProcedure } from "@/server/trpc";
+import { promises as fs } from "node:fs";
+import { router, publicProcedure, protectedProcedure } from "@/server/trpc";
 import {
   getFolder,
   getFolders,
   getVideoFile,
+  invalidateVideoScan,
   listFolderTree,
   listVideos,
+  resolveVideoPath,
   videoSubPath,
 } from "@/server/config/folders";
+import {
+  isFavorite,
+  readFavorites,
+  setFavorite,
+} from "@/server/data/favorites";
 import {
   listVideosInputSchema,
   listVideosOutputSchema,
   videoFileSchema,
   videoFolderNodeSchema,
   videoFolderSchema,
+  videoRefSchema,
 } from "@/schemas/video";
 
 export const folderRouter = router({
@@ -75,7 +84,9 @@ export const folderRouter = router({
 
   /** Single video's metadata by id (used by the watch page). */
   video: publicProcedure
-    .input(z.object({ folderId: z.string().min(1), videoId: z.string().min(1) }))
+    .input(
+      z.object({ folderId: z.string().min(1), videoId: z.string().min(1) }),
+    )
     .output(videoFileSchema)
     .query(async ({ input }) => {
       const folder = getFolder(input.folderId);
@@ -87,5 +98,43 @@ export const folderRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Unknown video" });
       }
       return video;
+    }),
+
+  /** Favourited videos across all folders (stale entries are skipped). */
+  favorites: protectedProcedure
+    .output(z.array(z.object({ folderId: z.string(), video: videoFileSchema })))
+    .query(async () => {
+      const resolved = await Promise.all(
+        (await readFavorites()).map(async ({ folderId, videoId }) => {
+          const folder = getFolder(folderId);
+          const video = folder && (await getVideoFile(folder, videoId));
+          return video ? { folderId, video } : null;
+        }),
+      );
+      return resolved.filter((f) => f !== null);
+    }),
+
+  isFavorite: protectedProcedure
+    .input(videoRefSchema)
+    .output(z.boolean())
+    .query(({ input }) => isFavorite(input)),
+
+  setFavorite: protectedProcedure
+    .input(videoRefSchema.extend({ favorite: z.boolean() }))
+    .output(z.boolean())
+    .mutation(({ input: { favorite, ...ref } }) => setFavorite(ref, favorite)),
+
+  /** Permanently delete a video file from disk (no trash, no undo). */
+  delete: protectedProcedure
+    .input(videoRefSchema)
+    .mutation(async ({ input }) => {
+      const folder = getFolder(input.folderId);
+      const resolved = folder && resolveVideoPath(folder, input.videoId);
+      if (!resolved) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Unknown video" });
+      }
+      await fs.unlink(resolved.absPath);
+      invalidateVideoScan(input.folderId);
+      await setFavorite(input, false);
     }),
 });

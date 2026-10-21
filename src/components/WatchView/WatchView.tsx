@@ -8,6 +8,14 @@ import Button from "@mui/material/Button";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import IconButton from "@mui/material/IconButton";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogActions from "@mui/material/DialogActions";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import MovieIcon from "@mui/icons-material/Movie";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
@@ -15,7 +23,9 @@ import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import type { VideoFile } from "@/schemas/video";
 import { Link, useRouter } from "@/i18n/navigation";
+import { api } from "@/trpc/react";
 import {
+  folderHref,
   formatBytes,
   videoStreamUrl,
   videoThumbnailUrl,
@@ -151,6 +161,31 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
     [cinema, folderId, router],
   );
 
+  const utils = api.useUtils();
+  const ref = { folderId, videoId: playing.id };
+  const favorite = api.folder.isFavorite.useQuery(ref);
+  const setFavorite = api.folder.setFavorite.useMutation({
+    onSuccess: (value) => utils.folder.isFavorite.setData(ref, value),
+  });
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const remove = api.folder.delete.useMutation({
+    onSuccess: () => {
+      setConfirmDelete(false);
+      // Carry on with a neighbour; if it was the last one, back to its folder.
+      const neighbour = next ?? previous;
+      const dir = playing.relPath.includes("/")
+        ? playing.relPath.slice(0, playing.relPath.lastIndexOf("/"))
+        : "";
+      router.replace(
+        neighbour
+          ? watchHref(folderId, neighbour.id)
+          : folderHref(folderId, dir),
+      );
+      router.refresh();
+    },
+  });
+
   /** Fullscreen the container, so the overlay can sit above the picture. */
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
@@ -265,19 +300,73 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
             {t("next")}
           </Button>
         </Stack>
-        <div>
-          <Typography variant="h5" fontWeight={700}>
-            {playing.name}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {formatBytes(playing.size)} ·{" "}
-            {format.dateTime(playing.modifiedAt, { dateStyle: "medium" })}
-            {playing.relPath.includes("/")
-              ? ` · ${playing.relPath.slice(0, playing.relPath.lastIndexOf("/"))}`
-              : ""}
-          </Typography>
-        </div>
+        <Stack direction="row" spacing={1} alignItems="flex-start">
+          <div style={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="h5" fontWeight={700}>
+              {playing.name}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {formatBytes(playing.size)} ·{" "}
+              {format.dateTime(playing.modifiedAt, { dateStyle: "medium" })}
+              {playing.relPath.includes("/")
+                ? ` · ${playing.relPath.slice(0, playing.relPath.lastIndexOf("/"))}`
+                : ""}
+            </Typography>
+          </div>
+          <IconButton
+            color="warning"
+            disabled={favorite.isPending || setFavorite.isPending}
+            aria-label={favorite.data ? t("unfavorite") : t("favorite")}
+            title={favorite.data ? t("unfavorite") : t("favorite")}
+            onClick={() =>
+              setFavorite.mutate({ ...ref, favorite: !favorite.data })
+            }
+          >
+            {favorite.data ? <StarIcon /> : <StarBorderIcon />}
+          </IconButton>
+          <IconButton
+            color="error"
+            aria-label={t("delete")}
+            title={t("delete")}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <DeleteForeverIcon />
+          </IconButton>
+        </Stack>
       </Stack>
+
+      <Dialog
+        open={confirmDelete}
+        onClose={() => !remove.isPending && setConfirmDelete(false)}
+      >
+        <DialogTitle>{t("deleteTitle")}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t("deleteBody", { name: playing.name })}
+          </DialogContentText>
+          {remove.isError && (
+            <DialogContentText color="error" sx={{ mt: 1 }}>
+              {remove.error.message}
+            </DialogContentText>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            disabled={remove.isPending}
+            onClick={() => setConfirmDelete(false)}
+          >
+            {t("cancel")}
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(ref)}
+          >
+            {t("delete")}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Stack spacing={1.5}>
         <Typography variant="subtitle1" fontWeight={600}>

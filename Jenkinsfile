@@ -48,10 +48,11 @@ pipeline {
         sh '''
           mkdir -p "$DEPLOY_DIR"
           # Sync build + deps into the live dir. Never touch the server's
-          # secrets (.env.local) or its git metadata.
+          # secrets (.env.local), favourites (.data) or its git metadata.
           rsync -a --delete \
             --exclude='.git' \
             --exclude='.env.local' \
+            --exclude='.data' \
             ./ "$DEPLOY_DIR/"
 
           # Restart via whichever init system is present.
