@@ -18,6 +18,10 @@ import CircularProgress from "@mui/material/CircularProgress";
 import SearchIcon from "@mui/icons-material/Search";
 import HomeIcon from "@mui/icons-material/Home";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { api } from "@/trpc/react";
 import { useRouter } from "@/i18n/navigation";
 import { folderHref, parentPath } from "@/lib/video";
@@ -70,6 +74,18 @@ export function VideoBrowser({ folderId }: { folderId: string }) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [tree.data, path, searching]);
 
+  // Previous / next sibling of the current sub-folder (same parent, by name).
+  const [prevSibling, nextSibling] = useMemo(() => {
+    if (path === "" || !tree.data) return [undefined, undefined];
+    const parent = parentPath(path);
+    const siblings = tree.data
+      .filter((node) => parentPath(node.path) === parent)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const i = siblings.findIndex((node) => node.path === path);
+    if (i === -1) return [undefined, undefined];
+    return [siblings[i - 1], siblings[i + 1]];
+  }, [tree.data, path]);
+
   const query = api.folder.videos.useQuery(
     {
       folderId,
@@ -115,37 +131,81 @@ export function VideoBrowser({ folderId }: { folderId: string }) {
         alignItems={{ sm: "center" }}
         justifyContent="space-between"
       >
-        <Breadcrumbs sx={{ flexGrow: 1 }}>
-          <MuiLink
-            component="button"
-            type="button"
-            underline="hover"
-            color={path === "" ? "text.primary" : "inherit"}
-            onClick={() => goTo("")}
-            sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}
-          >
-            <HomeIcon fontSize="small" />
-            {t("home")}
-          </MuiLink>
-          {crumbs.map((crumb, i) =>
-            i === crumbs.length - 1 ? (
-              <Typography key={crumb.path} color="text.primary">
-                {crumb.name}
-              </Typography>
-            ) : (
-              <MuiLink
-                key={crumb.path}
-                component="button"
-                type="button"
-                underline="hover"
-                color="inherit"
-                onClick={() => goTo(crumb.path)}
-              >
-                {crumb.name}
-              </MuiLink>
-            ),
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ flexGrow: 1 }}
+        >
+          {path !== "" && (
+            <Stack direction="row">
+              {(
+                [
+                  {
+                    node: prevSibling,
+                    label: "prevFolder",
+                    Icon: ChevronLeftIcon,
+                  },
+                  {
+                    node: nextSibling,
+                    label: "nextFolder",
+                    Icon: ChevronRightIcon,
+                  },
+                ] as const
+              ).map(({ node, label, Icon }) => (
+                <Tooltip
+                  key={label}
+                  title={node ? t(label, { name: node.name }) : ""}
+                >
+                  {/* span keeps the tooltip working on a disabled button */}
+                  <span>
+                    <IconButton
+                      size="small"
+                      disabled={!node}
+                      aria-label={
+                        node ? t(label, { name: node.name }) : undefined
+                      }
+                      onClick={() => node && goTo(node.path)}
+                    >
+                      <Icon />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              ))}
+            </Stack>
           )}
-        </Breadcrumbs>
+          <Breadcrumbs sx={{ flexGrow: 1 }}>
+            <MuiLink
+              component="button"
+              type="button"
+              underline="hover"
+              color={path === "" ? "text.primary" : "inherit"}
+              onClick={() => goTo("")}
+              sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}
+            >
+              <HomeIcon fontSize="small" />
+              {t("home")}
+            </MuiLink>
+            {crumbs.map((crumb, i) =>
+              i === crumbs.length - 1 ? (
+                <Typography key={crumb.path} color="text.primary">
+                  {crumb.name}
+                </Typography>
+              ) : (
+                <MuiLink
+                  key={crumb.path}
+                  component="button"
+                  type="button"
+                  underline="hover"
+                  color="inherit"
+                  onClick={() => goTo(crumb.path)}
+                >
+                  {crumb.name}
+                </MuiLink>
+              ),
+            )}
+          </Breadcrumbs>
+        </Stack>
 
         <Stack direction="row" spacing={2} alignItems="center">
           <TextField

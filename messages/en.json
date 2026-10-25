@@ -23,7 +23,9 @@
     "count": "{count, plural, =0 {No videos} =1 {# video} other {# videos}}",
     "search": "Search videos",
     "perPage": "Per page",
-    "home": "Home"
+    "home": "Home",
+    "prevFolder": "Previous folder: {name}",
+    "nextFolder": "Next folder: {name}"
   },
   "Player": {
     "close": "Close"
