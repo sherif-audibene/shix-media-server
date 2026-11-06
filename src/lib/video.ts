@@ -39,3 +39,18 @@ export function parentPath(path: string): string | null {
   const slash = path.lastIndexOf("/");
   return slash === -1 ? "" : path.slice(0, slash);
 }
+
+/** Previous / next sibling of a sub-folder (same parent, sorted by name). */
+export function folderSiblings<T extends { path: string; name: string }>(
+  tree: T[],
+  path: string,
+): [T | undefined, T | undefined] {
+  if (path === "") return [undefined, undefined];
+  const parent = parentPath(path);
+  const siblings = tree
+    .filter((node) => parentPath(node.path) === parent)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const i = siblings.findIndex((node) => node.path === path);
+  if (i === -1) return [undefined, undefined];
+  return [siblings[i - 1], siblings[i + 1]];
+}
