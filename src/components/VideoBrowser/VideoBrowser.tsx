@@ -24,7 +24,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { api } from "@/trpc/react";
 import { useRouter } from "@/i18n/navigation";
-import { folderHref, parentPath } from "@/lib/video";
+import { folderHref, folderSiblings, parentPath } from "@/lib/video";
 import { VideoCard } from "@/components/VideoCard/VideoCard";
 import { FolderCard } from "@/components/FolderCard/FolderCard";
 import { Grid } from "@/components/VideoGrid/VideoGrid.styled";
@@ -75,16 +75,10 @@ export function VideoBrowser({ folderId }: { folderId: string }) {
   }, [tree.data, path, searching]);
 
   // Previous / next sibling of the current sub-folder (same parent, by name).
-  const [prevSibling, nextSibling] = useMemo(() => {
-    if (path === "" || !tree.data) return [undefined, undefined];
-    const parent = parentPath(path);
-    const siblings = tree.data
-      .filter((node) => parentPath(node.path) === parent)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const i = siblings.findIndex((node) => node.path === path);
-    if (i === -1) return [undefined, undefined];
-    return [siblings[i - 1], siblings[i + 1]];
-  }, [tree.data, path]);
+  const [prevSibling, nextSibling] = useMemo(
+    () => folderSiblings(tree.data ?? [], path),
+    [tree.data, path],
+  );
 
   const query = api.folder.videos.useQuery(
     {
