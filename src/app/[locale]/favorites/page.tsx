@@ -51,6 +51,7 @@ export default async function FavoritesPage({
                 key={`${folderId}/${video.id}`}
                 folderId={folderId}
                 video={video}
+                list="favorites"
               />
             ))}
           </Grid>

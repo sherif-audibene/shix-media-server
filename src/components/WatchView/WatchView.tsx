@@ -30,6 +30,8 @@ import {
   videoStreamUrl,
   videoThumbnailUrl,
   watchHref,
+  type WatchItem,
+  type WatchList,
 } from "@/lib/video";
 import {
   Layout,
@@ -56,10 +58,15 @@ function isFullscreen(video: HTMLVideoElement | null): boolean {
 }
 
 export interface WatchViewProps {
-  folderId: string;
-  current: VideoFile;
-  videos: VideoFile[];
+  current: WatchItem;
+  /** Playback queue, already in play order (may span folders). */
+  items: WatchItem[];
+  /** Queue the page was opened from; kept on every link so it sticks. */
+  list?: WatchList;
 }
+
+/** Stable identity for a queue entry (video ids are only unique per folder). */
+const keyOf = ({ folderId, video }: WatchItem) => `${folderId}/${video.id}`;
 
 /** Thumbnail for the up-next rail, falling back to an icon on error. */
 function RailThumb({
@@ -90,8 +97,9 @@ function RailThumb({
 }
 
 /** Dedicated watch page body: large player + "more in this folder" rail. */
-export function WatchView({ folderId, current, videos }: WatchViewProps) {
+export function WatchView({ current, items, list }: WatchViewProps) {
   const t = useTranslations("Watch");
+  const tFavorites = useTranslations("Favorites");
   const format = useFormatter();
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -101,6 +109,9 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
   // What the player shows: normally the server-rendered video, but cinema
   // mode swaps it in place (no route change) to keep fullscreen alive.
   const [playing, setPlaying] = useState(current);
+  const { folderId, video: playingVideo } = playing;
+  const playingKey = keyOf(playing);
+  const currentKey = keyOf(current);
   const [cinema, setCinema] = useState(false);
 
   useEffect(() => {
@@ -120,7 +131,8 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
   useEffect(() => setCinema(localStorage.getItem(CINEMA_KEY) === "1"), []);
 
   // A real navigation (rail click, direct link, back button) always wins.
-  useEffect(() => setPlaying(current), [current]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setPlaying(current), [currentKey]);
 
   // Same element, new source: reload and keep going. Remounting the <video>
   // — which a route change does — would drop the fullscreen session.
@@ -129,22 +141,16 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
     if (!el) return;
     el.load();
     void el.play().catch(() => {});
-  }, [playing.id]);
+  }, [playingKey]);
 
-  // Rail order: by name (locale-aware), so "up next" follows what's listed.
-  const others = useMemo(
-    () => [...videos].sort((a, b) => a.name.localeCompare(b.name)),
-    [videos],
-  );
-
-  // Neighbours in the rail order: previous, and the next one — which also
-  // plays automatically when this video ends.
+  // Neighbours in the queue: previous, and the next one — which also plays
+  // automatically when this video ends.
   const [previous, next] = useMemo(() => {
-    const index = others.findIndex((v) => v.id === playing.id);
+    const index = items.findIndex((item) => keyOf(item) === playingKey);
     return index < 0
       ? [undefined, undefined]
-      : [others[index - 1], others[index + 1]];
-  }, [others, playing.id]);
+      : [items[index - 1], items[index + 1]];
+  }, [items, playingKey]);
 
   /**
    * Move to another video. While fullscreen, swap the source in place so the
@@ -152,17 +158,17 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
    * cinema mode is on; a click is always meant to stay fullscreen.
    */
   const go = useCallback(
-    (video: VideoFile | undefined, autoplayed = false) => {
-      if (!video) return;
+    (item: WatchItem | undefined, autoplayed = false) => {
+      if (!item) return;
       if (isFullscreen(videoRef.current) && (cinema || !autoplayed))
-        setPlaying(video);
-      else router.push(watchHref(folderId, video.id));
+        setPlaying(item);
+      else router.push(watchHref(item.folderId, item.video.id, list));
     },
-    [cinema, folderId, router],
+    [cinema, list, router],
   );
 
   const utils = api.useUtils();
-  const ref = { folderId, videoId: playing.id };
+  const ref = { folderId, videoId: playingVideo.id };
   const favorite = api.folder.isFavorite.useQuery(ref);
   const setFavorite = api.folder.setFavorite.useMutation({
     onSuccess: (value) => utils.folder.isFavorite.setData(ref, value),
@@ -174,13 +180,15 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
       setConfirmDelete(false);
       // Carry on with a neighbour; if it was the last one, back to its folder.
       const neighbour = next ?? previous;
-      const dir = playing.relPath.includes("/")
-        ? playing.relPath.slice(0, playing.relPath.lastIndexOf("/"))
+      const dir = playingVideo.relPath.includes("/")
+        ? playingVideo.relPath.slice(0, playingVideo.relPath.lastIndexOf("/"))
         : "";
       router.replace(
         neighbour
-          ? watchHref(folderId, neighbour.id)
-          : folderHref(folderId, dir),
+          ? watchHref(neighbour.folderId, neighbour.video.id, list)
+          : list
+            ? "/favorites"
+            : folderHref(folderId, dir),
       );
       router.refresh();
     },
@@ -204,10 +212,11 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
   // In-place swaps leave the URL pointing at the video we started from; put
   // it back in sync as soon as the user leaves fullscreen.
   useEffect(() => {
-    if (playing.id === current.id) return;
+    if (playingKey === currentKey) return;
     const el = videoRef.current;
     const sync = () => {
-      if (!isFullscreen(el)) router.replace(watchHref(folderId, playing.id));
+      if (!isFullscreen(el))
+        router.replace(watchHref(folderId, playingVideo.id, list));
     };
     document.addEventListener("fullscreenchange", sync);
     el?.addEventListener("webkitendfullscreen", sync);
@@ -215,7 +224,7 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
       document.removeEventListener("fullscreenchange", sync);
       el?.removeEventListener("webkitendfullscreen", sync);
     };
-  }, [playing.id, current.id, folderId, router]);
+  }, [playingKey, currentKey, folderId, playingVideo.id, list, router]);
 
   return (
     <Layout>
@@ -230,8 +239,8 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
             onEnded={() => go(next, true)}
           >
             <source
-              src={videoStreamUrl(folderId, playing.id)}
-              type={playing.mimeType}
+              src={videoStreamUrl(folderId, playingVideo.id)}
+              type={playingVideo.mimeType}
             />
           </video>
           <Overlay className="overlay">
@@ -239,7 +248,7 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
               className="skip prev"
               disabled={!previous}
               aria-label={t("previous")}
-              title={previous?.name ?? t("previous")}
+              title={previous?.video.name ?? t("previous")}
               onClick={() => go(previous)}
             >
               <SkipPreviousIcon fontSize="large" />
@@ -248,7 +257,7 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
               className="skip next"
               disabled={!next}
               aria-label={t("next")}
-              title={next?.name ?? t("next")}
+              title={next?.video.name ?? t("next")}
               onClick={() => go(next)}
             >
               <SkipNextIcon fontSize="large" />
@@ -268,7 +277,7 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
             disabled={!previous}
             startIcon={<SkipPreviousIcon />}
             color="inherit"
-            title={previous?.name}
+            title={previous?.video.name}
             onClick={() => go(previous)}
           >
             {t("previous")}
@@ -294,7 +303,7 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
             disabled={!next}
             endIcon={<SkipNextIcon />}
             color="inherit"
-            title={next?.name}
+            title={next?.video.name}
             onClick={() => go(next)}
           >
             {t("next")}
@@ -303,13 +312,15 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
         <Stack direction="row" spacing={1} alignItems="flex-start">
           <div style={{ flexGrow: 1, minWidth: 0 }}>
             <Typography variant="h5" fontWeight={700}>
-              {playing.name}
+              {playingVideo.name}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {formatBytes(playing.size)} ·{" "}
-              {format.dateTime(playing.modifiedAt, { dateStyle: "medium" })}
-              {playing.relPath.includes("/")
-                ? ` · ${playing.relPath.slice(0, playing.relPath.lastIndexOf("/"))}`
+              {formatBytes(playingVideo.size)} ·{" "}
+              {format.dateTime(playingVideo.modifiedAt, {
+                dateStyle: "medium",
+              })}
+              {playingVideo.relPath.includes("/")
+                ? ` · ${playingVideo.relPath.slice(0, playingVideo.relPath.lastIndexOf("/"))}`
                 : ""}
             </Typography>
           </div>
@@ -342,7 +353,7 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
         <DialogTitle>{t("deleteTitle")}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {t("deleteBody", { name: playing.name })}
+            {t("deleteBody", { name: playingVideo.name })}
           </DialogContentText>
           {remove.isError && (
             <DialogContentText color="error" sx={{ mt: 1 }}>
@@ -370,14 +381,16 @@ export function WatchView({ folderId, current, videos }: WatchViewProps) {
 
       <Stack spacing={1.5}>
         <Typography variant="subtitle1" fontWeight={600}>
-          {t("upNext")}
+          {list ? tFavorites("title") : t("upNext")}
         </Typography>
-        {others.map((video) => {
-          const active = video.id === playing.id;
+        {items.map((item) => {
+          const { video } = item;
+          const key = keyOf(item);
+          const active = key === playingKey;
           return (
-            <Link key={video.id} href={watchHref(folderId, video.id)}>
+            <Link key={key} href={watchHref(item.folderId, video.id, list)}>
               <UpNextItem data-active={active}>
-                <RailThumb folderId={folderId} video={video} />
+                <RailThumb folderId={item.folderId} video={video} />
                 <Stack spacing={0.5} sx={{ minWidth: 0 }}>
                   <Typography
                     variant="body2"
