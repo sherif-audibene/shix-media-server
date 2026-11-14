@@ -20,25 +20,36 @@ import type {
   VideoFolderNode,
 } from "@/schemas/video";
 import { WatchView } from "@/components/WatchView/WatchView";
-import { folderHref, folderSiblings } from "@/lib/video";
+import {
+  folderHref,
+  folderSiblings,
+  type WatchItem,
+  type WatchList,
+} from "@/lib/video";
 
 export const dynamic = "force-dynamic";
 
 export default async function WatchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; folderId: string; videoId: string }>;
+  searchParams: Promise<{ list?: string }>;
 }) {
   const { locale, folderId, videoId } = await params;
+  const list: WatchList | undefined =
+    (await searchParams).list === "favorites" ? "favorites" : undefined;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
   await requireUser();
   const t = await getTranslations("Watch");
   const tVideos = await getTranslations("Videos");
+  const tFavorites = await getTranslations("Favorites");
 
   let data: ListVideosOutput;
   let current: VideoFile;
   let tree: VideoFolderNode[];
+  let items: WatchItem[];
   try {
     current = await trpc.folder.video({ folderId, videoId });
     // The "more in this folder" rail lists only the current video's
@@ -49,6 +60,13 @@ export default async function WatchPage({
       pageSize: 500,
     });
     tree = await trpc.folder.tree({ folderId });
+    // Queue for prev/next/autoplay: the favourites list (in its listed order)
+    // when opened from there, otherwise this sub-folder sorted by name.
+    items = list
+      ? await trpc.folder.favorites()
+      : [...data.videos]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((video) => ({ folderId, video }));
   } catch {
     notFound();
   }
@@ -65,16 +83,19 @@ export default async function WatchPage({
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Stack spacing={3}>
         <Stack direction="row" alignItems="center">
-          <Link href={folderHref(folderId, subPath)}>
+          <Link href={list ? "/favorites" : folderHref(folderId, subPath)}>
             <Button startIcon={<ArrowBackIcon />} color="inherit">
               {t("back", {
-                folder: subPath
-                  ? subPath.slice(subPath.lastIndexOf("/") + 1)
-                  : data.folder.label,
+                folder: list
+                  ? tFavorites("title")
+                  : subPath
+                    ? subPath.slice(subPath.lastIndexOf("/") + 1)
+                    : data.folder.label,
               })}
             </Button>
           </Link>
-          {subPath !== "" &&
+          {!list &&
+            subPath !== "" &&
             siblingNav.map(({ node, label, Icon }) =>
               node ? (
                 <Tooltip
@@ -97,7 +118,11 @@ export default async function WatchPage({
               ),
             )}
         </Stack>
-        <WatchView folderId={folderId} current={current} videos={data.videos} />
+        <WatchView
+          current={{ folderId, video: current }}
+          items={items}
+          list={list}
+        />
       </Stack>
     </Container>
   );

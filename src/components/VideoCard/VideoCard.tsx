@@ -10,7 +10,12 @@ import PlayCircleIcon from "@mui/icons-material/PlayCircleOutline";
 import MovieIcon from "@mui/icons-material/Movie";
 import type { VideoFile } from "@/schemas/video";
 import { Link } from "@/i18n/navigation";
-import { formatBytes, videoThumbnailUrl, watchHref } from "@/lib/video";
+import {
+  formatBytes,
+  videoThumbnailUrl,
+  watchHref,
+  type WatchList,
+} from "@/lib/video";
 import {
   CardClickArea,
   PlayBadge,
@@ -20,13 +25,15 @@ import {
 export interface VideoCardProps {
   folderId: string;
   video: VideoFile;
+  /** Queue the watch page should play through (default: the folder). */
+  list?: WatchList;
 }
 
 /**
  * A YouTube-style thumbnail card. Uses the ffmpeg-generated poster image and
  * links to the dedicated /watch page.
  */
-export function VideoCard({ folderId, video }: VideoCardProps) {
+export function VideoCard({ folderId, video, list }: VideoCardProps) {
   const format = useFormatter();
   const [failed, setFailed] = useState(false);
   const subdir = video.relPath.includes("/")
@@ -35,7 +42,7 @@ export function VideoCard({ folderId, video }: VideoCardProps) {
 
   return (
     <Card variant="outlined">
-      <Link href={watchHref(folderId, video.id)}>
+      <Link href={watchHref(folderId, video.id, list)}>
         <CardClickArea>
           <Thumb>
             {failed ? (

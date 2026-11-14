@@ -1,3 +1,5 @@
+import type { VideoFile } from "@/schemas/video";
+
 /** Build the streaming URL for a video (safe to import on the client). */
 export function videoStreamUrl(folderId: string, videoId: string): string {
   const params = new URLSearchParams({ f: folderId, v: videoId });
@@ -10,9 +12,23 @@ export function videoThumbnailUrl(folderId: string, videoId: string): string {
   return `/api/thumbnail?${params.toString()}`;
 }
 
+/** Playback queue a watch page was opened from (default: the video's folder). */
+export type WatchList = "favorites";
+
+/** A video plus the folder it lives in (queues can span folders). */
+export interface WatchItem {
+  folderId: string;
+  video: VideoFile;
+}
+
 /** Locale-relative path to the dedicated watch page for a video. */
-export function watchHref(folderId: string, videoId: string): string {
-  return `/watch/${folderId}/${videoId}`;
+export function watchHref(
+  folderId: string,
+  videoId: string,
+  list?: WatchList,
+): string {
+  const href = `/watch/${folderId}/${videoId}`;
+  return list ? `${href}?list=${list}` : href;
 }
 
 /** Human-readable file size. */
